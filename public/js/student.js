@@ -39,6 +39,7 @@
     renderDays();
     renderBooks();
     renderPrefs();
+    renderContacts();
     setupBookForms();
   }
 
@@ -56,6 +57,8 @@
     bind('daysRead', RA.fmt(state.daysRead));
     bind('classMinutes', RA.fmt(state.classMinutes));
     bind('booksFinished', RA.fmt(state.books.filter(function (b) { return b.status === 'finished'; }).length));
+    $('#raised-stat').hidden = !state.donationTotalsEnabled;
+    if (state.donationTotalsEnabled) bind('raised', RA.money(state.raised));
     var goal = state.prefs.goalMinutes;
     $('#goal-card').hidden = !goal;
     if (goal) {
@@ -274,7 +277,8 @@
     $('#copy-donation').onclick = function () { RA.copyText(url, $('#copy-donation')); };
 
     var form = $('#prefs-form');
-    ['showReadingList', 'showTotalMinutes', 'showClassMinutes'].forEach(function (k) {
+    $('#show-raised').hidden = !state.donationTotalsEnabled;
+    ['showReadingList', 'showTotalMinutes', 'showClassMinutes', 'showRaised'].forEach(function (k) {
       form.elements[k].checked = !!state.prefs[k];
       form.elements[k].onchange = function () {
         var p = {};
@@ -287,6 +291,48 @@
       savePrefs({ goalMinutes: form.elements.goalMinutes.value || 0 });
     };
     form.onsubmit = function (e) { e.preventDefault(); };
+  }
+
+  function renderContacts() {
+    var rows = $('#contact-rows');
+    rows.innerHTML = '';
+    for (var i = 0; i < state.maxContacts; i++) {
+      var c = state.contacts[i] || { email: '', weeklyUpdates: false };
+      var row = document.createElement('div');
+      row.className = 'row contact-row';
+      row.innerHTML = '<input class="grow" type="email" autocomplete="email" maxlength="254" placeholder="name@example.com">' +
+        '<label class="toggle"><input type="checkbox"> Weekly updates</label>';
+      var email = row.querySelector('input[type=email]');
+      var weekly = row.querySelector('input[type=checkbox]');
+      email.value = c.email;
+      email.setAttribute('aria-label', 'Family email ' + (i + 1));
+      weekly.checked = c.weeklyUpdates;
+      weekly.setAttribute('aria-label', 'Weekly updates for family email ' + (i + 1));
+      weekly.parentNode.hidden = !state.weeklyUpdatesEnabled;
+      rows.appendChild(row);
+    }
+    $('#contacts-form').onsubmit = function (e) {
+      e.preventDefault();
+      saveContacts();
+    };
+  }
+
+  async function saveContacts() {
+    var statusEl = $('#contacts-status');
+    var contacts = Array.prototype.map.call(app.querySelectorAll('.contact-row'), function (row) {
+      return { email: row.querySelector('input[type=email]').value.trim(), weeklyUpdates: row.querySelector('input[type=checkbox]').checked };
+    });
+    try {
+      var r = await RA.api('student.setContacts', { token: token, contacts: contacts });
+      state.contacts = r.contacts;
+      renderContacts();
+      var msg = 'Saved ✓';
+      if (r.sent) msg += ' We emailed the links to ' + r.sent + ' new address' + (r.sent === 1 ? '' : 'es') + '.';
+      if (r.failed.length || r.remaining) msg += ' Some emails couldn\'t be sent right now; ask your teacher to resend them.';
+      setStatus(statusEl, msg, !(r.failed.length || r.remaining));
+    } catch (err) {
+      setStatus(statusEl, err.message, false);
+    }
   }
 
   async function savePrefs(changes) {

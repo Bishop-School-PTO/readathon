@@ -114,6 +114,8 @@ textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-siz
 
 .toggle { display: flex; align-items: flex-start; gap: .6rem; padding: .55rem 0; font-weight: 600; cursor: pointer; }
 .toggle input { width: 1.2rem; height: 1.2rem; margin-top: .15rem; accent-color: var(--navy); }
+.contact-row { margin-bottom: .25rem; }
+.contact-row .toggle { padding: .3rem 0; }
 
 .notice { padding: .75rem 1rem; border-radius: 10px; background: var(--gold-soft); border: 1px solid #ecd77a; margin-bottom: 1rem; }
 .notice.error { background: #fde8e6; border-color: #f1b7b1; color: #7a1a14; }
@@ -171,12 +173,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .tabs { display: flex; gap: .25rem; border-bottom: 2px solid var(--line); margin-bottom: 1.25rem; flex-wrap: wrap; }
 .tabs button { all: unset; cursor: pointer; padding: .55rem .9rem; font-weight: 800; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -2px; }
 .tabs button[aria-selected=true] { color: var(--navy); border-color: var(--gold); }
-.preview-frame { width: 100%; min-height: 240px; border: 1px dashed #cfc8b4; border-radius: 10px; background: #fff; }
-.vars code { background: #f6f2e4; padding: .1rem .35rem; border-radius: 5px; font-size: .85rem; }
 
-/* Donation widget default styling */
-.widget { margin-top: .5rem; }
-.widget-default .btn { font-size: 1.1rem; padding: .75rem 1.3rem; }
+/* Donate button on donation pages */
+.btn-donate { font-size: 1.1rem; padding: .75rem 1.3rem; }
 
 .site-footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 2rem 1rem; }
 

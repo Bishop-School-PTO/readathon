@@ -4,9 +4,10 @@ const { SCHEMA } = require('../apps-script/Core.js');
 
 function createFileStore(file, roster, adminEmails) {
   let db = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
-  if (!db) {
-    db = { tables: {} };
-    for (const name of Object.keys(SCHEMA)) db.tables[name] = { headers: SCHEMA[name].slice(), rows: [] };
+  if (!db) db = { tables: {} };
+  // Like setup() in Apps Script: add any tabs that are missing (e.g. from an older data.json).
+  for (const name of Object.keys(SCHEMA)) {
+    if (!db.tables[name]) db.tables[name] = { headers: SCHEMA[name].slice(), rows: [] };
   }
   const cache = new Map();
   const save = () => { if (file) fs.writeFileSync(file, JSON.stringify(db, null, 1)); };

@@ -47,6 +47,12 @@
     return Number(n || 0).toLocaleString('en-US');
   }
 
+  /** Cents to "$1,234" (or "$12.50" when there are cents). */
+  function money(cents) {
+    var n = Number(cents || 0) / 100;
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+  }
+
   function prettyMinutes(n) {
     n = Number(n || 0);
     if (n < 120) return fmt(n) + ' min';
@@ -142,7 +148,7 @@
   }
 
   window.RA = {
-    api: api, routeParam: routeParam, esc: esc, fmt: fmt, prettyMinutes: prettyMinutes,
+    api: api, routeParam: routeParam, esc: esc, fmt: fmt, money: money, prettyMinutes: prettyMinutes,
     formatDate: formatDate, gradeLabel: gradeLabel, percent: percent, findCoverUrl: findCoverUrl,
     coverEl: coverEl, copyText: copyText, showError: showError,
   };

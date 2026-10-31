@@ -44,16 +44,23 @@
         <button role="tab" data-tab="overview" aria-selected="true">Overview</button>
         <button role="tab" data-tab="students" aria-selected="false">Students &amp; links</button>
         <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
-        <button role="tab" data-tab="widget" aria-selected="false">Donation widget</button>
       </nav>
 
       <section data-panel="overview">
         <div class="stats" id="overview-stats"></div>
         <div class="card">
+          <div class="row">
+            <h2 class="grow" style="margin:0">Donations</h2>
+            <button class="btn" id="sync-donations">Sync donations now</button>
+          </div>
+          <p class="small" id="donation-link-status"></p>
+          <p class="small" id="donation-status" style="margin-bottom:0"></p>
+        </div>
+        <div class="card">
           <h2>Classes</h2>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Grade</th><th>Teacher</th><th class="num">Students</th><th class="num">Readers</th><th class="num">Minutes</th><th class="num">Avg / reader</th></tr></thead>
+              <thead><tr><th>Grade</th><th>Teacher</th><th class="num">Students</th><th class="num">Readers</th><th class="num">Minutes</th><th class="num">Avg / reader</th><th class="num">Raised</th></tr></thead>
               <tbody id="class-rows"></tbody>
             </table>
           </div>
@@ -65,12 +72,15 @@
           <div class="row">
             <div class="grow">
               <h2 style="margin:0">Students &amp; links</h2>
-              <p class="muted small" style="margin:0">Each student has a <strong>private log link</strong> (only for them) and a <strong>donation link</strong> (to share).</p>
+              <p class="muted small" style="margin:0">Each student has a <strong>private log link</strong> (only for them) and a <strong>donation link</strong> (to share).
+                Up to 5 family emails per student get both links by email.</p>
             </div>
             <button class="btn btn-gold" id="sync">Sync roster</button>
+            <button class="btn" id="email-links" title="Emails the links to every family email that hasn't been sent them yet">Email links to families</button>
             <button class="btn" id="export">Download CSV</button>
             <button class="btn" id="print">Print link slips</button>
           </div>
+          <p class="small muted quota" style="margin:.5rem 0 0"></p>
           <div id="sync-notice"></div>
           <div class="row" style="margin-top:1rem">
             <input type="search" id="student-search" class="grow" placeholder="Search by name, teacher, grade or code">
@@ -80,7 +90,7 @@
         <div class="card no-print">
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Student</th><th>Grade</th><th>Teacher</th><th class="num">Minutes</th><th class="num">Books</th><th>Code</th><th>Links</th></tr></thead>
+              <thead><tr><th>Student</th><th>Grade</th><th>Teacher</th><th class="num">Minutes</th><th class="num">Books</th><th class="num">Raised</th><th>Code</th><th>Family emails</th><th>Links</th></tr></thead>
               <tbody id="student-rows"></tbody>
             </table>
           </div>
@@ -106,7 +116,6 @@
                 <option value="full">Full name (Avery Example)</option>
               </select>
             </div>
-            <div class="field"><label for="s-site">Site URL (used for {donationUrl})</label><input id="s-site" name="siteUrl" type="text"></div>
           </div>
           <label class="toggle"><input type="checkbox" name="editsLocked"> Lock reading logs (students can no longer change minutes)</label>
           <label class="toggle"><input type="checkbox" name="homeShowClassTotals"> Show the class leaderboard on the home page</label>
@@ -115,38 +124,24 @@
           <label class="toggle"><input type="checkbox" name="defaultShowReadingList"> Show reading list</label>
           <label class="toggle"><input type="checkbox" name="defaultShowTotalMinutes"> Show the student's total minutes</label>
           <label class="toggle"><input type="checkbox" name="defaultShowClassMinutes"> Show the class's total minutes</label>
+          <label class="toggle"><input type="checkbox" name="defaultShowRaised"> Show how much has been raised for the student</label>
+          <h3 style="margin-top:1rem">Donation totals</h3>
+          <p class="muted small">Totals come from the Stripe donation link and refresh about every 10 minutes. Organizers always see them here.</p>
+          <label class="toggle"><input type="checkbox" name="showDonationTotals"> Show money raised on the site (school total, by grade and class, and on donation pages of students who opt in)</label>
+          <h3 style="margin-top:1rem">Family emails</h3>
+          <p class="muted small">Weekly updates go out Sunday evenings to family emails that opted in, plus one final summary after the end date.</p>
+          <label class="toggle"><input type="checkbox" name="weeklyUpdatesEnabled"> Send weekly progress updates</label>
+          <div class="field" style="max-width:360px"><label for="s-replyto">Reply-to address for emails (optional, must be @bishopschoolpto.com)</label><input id="s-replyto" name="emailReplyTo" type="email" placeholder="readathon@bishopschoolpto.com"></div>
+          <div class="row">
+            <button class="btn" type="button" id="send-weekly">Send this week's updates now</button>
+            <span class="status" id="weekly-status" role="status"></span>
+          </div>
+          <p class="small muted quota"></p>
           <div class="row" style="margin-top:1rem">
             <button class="btn btn-primary" type="submit">Save settings</button>
             <span class="status" id="settings-status" role="status"></span>
           </div>
         </form>
-      </section>
-
-      <section data-panel="widget" hidden>
-        <div class="grid two">
-          <form class="card" id="widget-form">
-            <h2>Donation widget HTML</h2>
-            <p class="muted small">Paste the embed code from your donation platform (Givebutter, Zeffy, PayPal, a plain link…). It appears on every student's donation page.</p>
-            <div class="field"><textarea id="widget-html" spellcheck="false" aria-label="Donation widget HTML"></textarea></div>
-            <div class="row">
-              <button class="btn btn-primary" type="submit">Save widget</button>
-              <button class="btn" type="button" id="widget-reset">Restore example</button>
-              <span class="status" id="widget-status" role="status"></span>
-            </div>
-            <div class="vars small" style="margin-top:1rem">
-              <p><strong>Template values</strong> — <code>{studentName}</code> is HTML-escaped; add <code>:url</code> inside links (<code>{studentName:url}</code>) or <code>:json</code> inside scripts (<code>{studentName:json}</code> gives a quoted string).</p>
-              <p id="var-list"></p>
-            </div>
-          </form>
-          <div class="card">
-            <div class="row">
-              <h2 class="grow" style="margin:0">Preview</h2>
-              <select id="preview-student" style="width:auto" aria-label="Preview as student"></select>
-            </div>
-            <p class="muted small">Scripts run in a sandbox here; on the real page they run normally.</p>
-            <iframe class="preview-frame" id="preview" sandbox="allow-scripts allow-popups allow-forms" title="Widget preview"></iframe>
-          </div>
-        </div>
       </section>
     </div>
   </main>

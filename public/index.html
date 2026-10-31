@@ -44,7 +44,9 @@
           '<div class="stats">' +
           '<div class="stat"><div class="value">' + RA.fmt(d.totalMinutes) + '</div><div class="label">minutes read school-wide</div></div>' +
           '<div class="stat"><div class="value">' + RA.fmt(Math.round(d.totalMinutes / 60)) + '</div><div class="label">hours of reading</div></div>' +
-          '<div class="stat"><div class="value">' + RA.fmt(d.readers) + '</div><div class="label">students reading</div></div></div>';
+          '<div class="stat"><div class="value">' + RA.fmt(d.readers) + '</div><div class="label">students reading</div></div>' +
+          (d.donations ? '<div class="stat"><div class="value">' + RA.money(d.donations.total) + '</div><div class="label">raised for the PTO</div></div>' : '') +
+          '</div>';
         if (goal) {
           html += '<div class="card"><div class="row"><strong class="grow">School goal: ' + RA.fmt(goal) + ' minutes</strong>' +
             '<span class="muted">' + pct + '%</span></div><div class="progress"><span style="width:' + pct + '%"></span></div></div>';
@@ -61,7 +63,22 @@
                 ' <span class="muted small">' + RA.esc(c.teacher ? RA.gradeLabel(c.grade) : '') + '</span></td><td class="num">' + RA.fmt(c.minutes) + '</td></tr>';
             }).join('') + '</tbody></table></div></section>';
         }
-        app.innerHTML = html + '</div>';
+        html += '</div>';
+        if (d.donations) {
+          var raisedRow = function (label, sub, cents) {
+            return '<tr><td>' + RA.esc(label) + (sub ? ' <span class="muted small">' + RA.esc(sub) + '</span>' : '') +
+              '</td><td class="num">' + RA.money(cents) + '</td></tr>';
+          };
+          html += '<h2 style="margin-top:1.5rem">Raised so far: ' + RA.money(d.donations.total) + '</h2>' +
+            '<div class="grid two"><section class="card"><h2>Raised by grade</h2><div class="table-wrap"><table><thead><tr><th>Grade</th><th class="num">Raised</th></tr></thead><tbody>' +
+            d.donations.grades.map(function (g) { return raisedRow(RA.gradeLabel(g.grade) || '—', '', g.raised); }).join('') +
+            '</tbody></table></div></section>' +
+            '<section class="card"><h2>Raised by class</h2><div class="table-wrap"><table><thead><tr><th>Teacher</th><th class="num">Raised</th></tr></thead><tbody>' +
+            d.donations.classes.map(function (c) {
+              return raisedRow(c.teacher || RA.gradeLabel(c.grade), c.teacher ? RA.gradeLabel(c.grade) : '', c.raised);
+            }).join('') + '</tbody></table></div></section></div>';
+        }
+        app.innerHTML = html;
       }).catch(function (err) { RA.showError(app, err.message); });
     })();
   </script>

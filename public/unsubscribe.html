@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Weekly Updates</title>
+  <link rel="icon" href="/img/paw.svg">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="inner">
+      <img src="/img/paw.svg" alt="">
+      <a href="/" id="site-title">Readathon</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- A button rather than unsubscribing on load, so email link scanners can't unsubscribe people. -->
+    <section class="card" id="app" style="max-width:480px; margin:2rem auto">
+      <h2>Weekly reading updates</h2>
+      <p>Stop getting weekly emails about your reader's progress? Your reading log and donation links keep working.</p>
+      <button class="btn btn-primary" type="button" id="unsubscribe">Stop weekly updates</button>
+      <p class="status" id="status" role="status"></p>
+    </section>
+  </main>
+
+  <script src="/config.js"></script>
+  <script src="/js/common.js"></script>
+  <script>
+    (function () {
+      var key = new URLSearchParams(location.search).get('k') || '';
+      var btn = document.getElementById('unsubscribe');
+      var status = document.getElementById('status');
+      if (!key) return RA.showError(document.getElementById('app'), 'This unsubscribe link is missing its code. Please use the link from the email.');
+      btn.onclick = async function () {
+        btn.disabled = true;
+        try {
+          var r = await RA.api('contact.unsubscribe', { key: key });
+          btn.hidden = true;
+          status.className = 'status ok';
+          status.textContent = r.email + ' won\'t get weekly updates anymore. To turn them back on, use "Family emails" on the reading log.';
+        } catch (err) {
+          btn.disabled = false;
+          status.className = 'status err';
+          status.textContent = err.message;
+        }
+      };
+    })();
+  </script>
+</body>
+</html>

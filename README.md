@@ -3,8 +3,10 @@
 A school-wide readathon app for **readathon.bishopschoolpto.com**:
 
 - **Students** get a private link (`/s/<token>`) where they log daily minutes, fix past days, record the book they're reading and books they've finished, set a goal, and choose what their donation page shows.
-- **Donors** visit a short link (`/d/<CODE>`) showing the student, their progress, and their bookshelf with covers from Open Library, plus the PTO's donation widget.
-- **Organizers** use `/admin` to sync the roster, hand out links (CSV or printable slips), see totals by class, change settings, and edit the donation widget HTML with template values like `{studentName}`.
+- **Families** can add up to 5 email addresses per student, on the student's page or in `/admin`. Each address is emailed the student's log link and donation link, and can opt in to a weekly progress update.
+- **Donors** visit a short link (`/d/<CODE>`) showing the student, their progress, and their bookshelf with covers from Open Library, plus a **Donate** button that opens a Stripe-hosted donation page tagged with the student's code.
+- **Money raised** is copied from Stripe every 10 minutes and shown school-wide, by grade and by class. Students can choose to show their own amount on their donation page (off by default), and organizers can hide all totals from the site.
+- **Organizers** use `/admin` to sync the roster, hand out links (CSV or printable slips), see totals by class, and change settings.
 - **The home page** (`/`) shows school-wide totals and an optional class leaderboard.
 
 ## How it fits together
@@ -41,6 +43,8 @@ The first tab, or the one named in `ROSTER_SHEET_NAME`, with a header row:
 | Students | student | studentId, name/grade/teacher (for reference), private **token**, donation **code**, goal, donation-page toggles |
 | Minutes | student per day | studentId, date, minutes, updatedAt |
 | Books | book | bookId, studentId, title, author, status (`reading`/`finished`), coverId, isbn |
+| Contacts | family email per student | studentId, email, weeklyUpdates, unsubscribeKey, linksSentAt, lastUpdateSentAt |
+| Donations | completed Stripe payment | sessionId, studentCode, amount, refunded (US dollars), currency, paymentStatus, createdAt. **Rewritten on every sync, so don't edit it or add columns.** |
 
 `Minutes` uses one row per student per day, so pivot tables work directly. You can add your own columns to the right; the app keeps them. Don't rename the existing headers.
 
@@ -62,6 +66,9 @@ Then open the project (`npx clasp open-script`), choose **setup** in the functio
 - creates a **Readathon Roster** spreadsheet with sample rows, unless you've already set `ROSTER_SPREADSHEET_ID`
 - creates the **Readathon Data** spreadsheet and its tabs
 - gives every roster student a token and code
+- installs the donation-sync trigger (every 10 minutes; it does nothing until the Stripe properties are set)
+- installs the weekly-update trigger (Sundays around 5pm, in the script's time zone; change it under **Triggers** in the editor)
+- asks for permission to send email as you
 
 The execution log at the bottom of the editor shows the spreadsheet URLs. These values live under **Project Settings → Script properties**:
 
@@ -71,6 +78,9 @@ The execution log at the bottom of the editor shows the spreadsheet URLs. These 
 | `ROSTER_SHEET_NAME` | Optional tab name; defaults to the first tab. |
 | `DATA_SPREADSHEET_ID` | Created by `setup()`. |
 | `GOOGLE_CLIENT_ID` | OAuth client ID for organizer sign-in (next step). |
+| `STRIPE_API_KEY` | Restricted, read-only Stripe key for donation totals (see **Donations with Stripe**). |
+| `STRIPE_PAYMENT_LINK_URL` | The donation Payment Link's `https://donate.stripe.com/…` URL. Every donation page's donate button points here. Without it, donation pages have no donate button. |
+| `STRIPE_PAYMENT_LINK_ID` | The same Payment Link's ID (`plink_…`). Only payments through this link are counted. |
 
 ### 2. Set up "Sign in with Google" for organizers
 
@@ -108,7 +118,7 @@ npm run gas:deploy
 
 Or in the editor: **Deploy → New deployment → Web app**, *Execute as: Me*, *Who has access: Anyone*. Copy the `/exec` URL into `public/config.js`.
 
-Ship later backend changes with `npm run gas:push && npm run gas:redeploy -- <deploymentId>`. Updating the existing deployment keeps the same URL.
+Ship later backend changes with `npm run gas:push && npm run gas:redeploy -- <deploymentId>`. Updating the existing deployment keeps the same URL. If an update adds a tab or needs a new permission (the family-emails update adds the **Contacts** tab and email sending; the Stripe update adds the **Donations** tab, a `showRaised` column on **Students**, and permission to call Stripe), run `setup()` again after pushing and before redeploying.
 
 Google's login isn't required for students or donors: the web app runs as you, and the spreadsheets stay private to you.
 
@@ -123,33 +133,53 @@ Google's login isn't required for students or donors: the web app runs as you, a
 
 1. Fill in the roster. In `/admin`: set the dates, title and goal under **Settings**, then click **Sync roster** under **Students & links**. Sync again whenever students are added.
 2. Give each student their private log link via **Download CSV** (e.g. for a mail merge to families) or **Print link slips**.
-3. Paste your donation platform's embed code under **Donation widget** and check the preview.
-4. When the readathon ends, tick **Lock reading logs** so totals stop changing.
+3. Set up donations (see **Donations with Stripe**). The **Overview** tab says whether donate buttons use a test-mode or live link.
+4. Collect family emails. Families can add them on the student's page, organizers can add them under **Students & links → Add emails**, or you can paste `studentId, email` rows (plus `TRUE` in `weeklyUpdates` for opted-in addresses) straight into the **Contacts** tab and then click **Email links to families**. That sends the links to every address that hasn't been sent them yet.
+5. When the readathon ends, tick **Lock reading logs** so totals stop changing.
 
-## Donation widget templates
+## Family emails
 
-| Value | Example |
-|---|---|
-| `{studentName}` | Avery E. (format set under Settings) |
-| `{studentFirstName}`, `{studentLastInitial}` | Avery, E. |
-| `{studentGrade}`, `{studentTeacher}` | 3, Mr. Chen |
-| `{studentCode}`, `{donationUrl}` | K7F2QM, https://readathon.bishopschoolpto.com/d/K7F2QM |
-| `{totalMinutes}`, `{goalMinutes}`, `{classMinutes}` | 340, 600, 4120 |
-| `{schoolName}`, `{readathonTitle}` | |
+- Each student can have up to 5 addresses. When an address is added, it's emailed the student's private log link and donation link. Bulk sends group by address: a parent listed for two children gets one email with both children's links. The student page can trigger at most 10 of these emails per student per day. Organizers can resend them, for example after **New log link**.
+- **Weekly updates** go to opted-in addresses on Sundays. Each email covers every student that address follows: minutes this week and in total, goal progress, and books finished. An address that already got an update in the last 5 days is skipped, so **Send this week's updates now** (under Settings) and the trigger won't double-send. Updates start once the start date has passed. After the end date, each address gets one final summary. Turn updates off under Settings.
+- Every weekly email has an unsubscribe link (`/unsubscribe.html?k=…`). It stops weekly updates for that address for all the students it follows.
+- Before **Email links to families**, **Resend links to all** and **Send this week's updates now**, `/admin` shows how many emails will go out and how many Google still allows today, and asks to confirm. **Emails left today** also appears under Students & links and Settings.
+- Emails come from the Google account that deployed the script, named after the readathon title. Set a **reply-to** under Settings if replies should go somewhere else. It must be an `@bishopschoolpto.com` address. Google limits how many emails a script can send each day: about **100 recipients for a Gmail account** and 1,500 for Google Workspace. A weekly run that hits Apps Script's 6-minute limit continues on its own a few minutes later. Addresses skipped because the quota ran out get their update when you click **Send this week's updates now** the next day, or at the next Sunday run. If you have more families than that, deploy from a Workspace account.
+- Locally, nothing is sent. Emails are printed to the console and can be read at `http://localhost:8082/dev/outbox`.
 
-- Plain `{value}` is HTML-escaped, for text and attributes.
-- `{value:url}` is URL-encoded, for query strings: `href="https://give.example/?note={studentName:url}"`.
-- `{value:json}` is a quoted JS string, for inside `<script>`: `var who = {studentName:json};`.
-- Unknown `{...}` is left alone, so CSS and JS braces are safe.
+## Donations with Stripe
 
-The widget's `<script>` tags run on the donation page, so embeds like Givebutter, Zeffy or PayPal buttons work. Widgets that rely on `document.write` won't work. Only paste code from sources you trust.
+Donors pay on a Stripe-hosted **Payment Link** where they choose the amount: $25 suggested, $5 minimum, $1,000 maximum. Each donation page's **Donate in honor of {first name}** button adds `?client_reference_id=<student code>` to the link, so Stripe records which student each gift was for. Taking donations needs no secret key, and the site never sees card details.
+
+The link comes from the `STRIPE_PAYMENT_LINK_URL` script property, not from the spreadsheet or `/admin`, so someone who takes over an organizer account can't point donors somewhere else. Only `https://donate.stripe.com/…` and `https://buy.stripe.com/…` URLs are accepted.
+
+A **test-mode** link already exists in the PTO's Stripe sandbox: `https://donate.stripe.com/test_00wbJ2ebP3zB8pObgZcjS00` (`plink_1UVseEK9lkVDlZj3Ah70Jh7I`). Set it as `STRIPE_PAYMENT_LINK_URL` to try donations, and use [test cards](https://docs.stripe.com/testing) such as `4242 4242 4242 4242`.
+
+**Show money raised (optional).** Apps Script can't verify Stripe webhooks because it can't read request headers. Instead, a trigger asks Stripe for the link's completed payments every 10 minutes and rewrites the **Donations** tab.
+
+1. In Stripe, go to **Developers → API keys → Create restricted key**. Give it **Read** access to **Checkout Sessions**, **PaymentIntents** and **Charges** (the last two are needed to subtract refunds), and nothing else.
+2. In Apps Script, under **Project Settings → Script properties**, add `STRIPE_API_KEY` (the `rk_…` key) and `STRIPE_PAYMENT_LINK_ID` (`plink_…`). Run `setup()` again.
+3. In `/admin`, the **Overview** tab shows totals and when they were last synced. Click **Sync donations now** to refresh right away.
+
+Only payments that Stripe marks `paid` count, minus refunds. Bank payments that are still clearing appear once they clear. Payments without a student code (for example, someone using the bare link) count toward the school total only. Organizers always see totals in `/admin`. **Settings → Show money raised on the site** controls everything public: the school total and the grade and class breakdowns on the home page, the student's own total on their log page, and per-student amounts on donation pages. Per-student amounts appear only for students who tick **Show how much money has been raised for me**, which is off by default. Organizers can change that default under Settings.
+
+**Going live:**
+
+1. Activate the PTO's Stripe account, then confirm whether the PTO has its own 501(c)(3) status or is covered by the district. Check what Stripe requires for [accepting donations](https://support.stripe.com/questions/requirements-for-accepting-tips-or-donations).
+2. Turn on **Settings → Customer emails → Successful payments** so donors get a receipt. Add the PTO's EIN and tax-deductibility wording to the receipt or the link's custom text.
+3. Create the same Payment Link in live mode ("Customers choose what to pay", call to action **Donate**).
+4. Create a live restricted key as in step 1 above. Replace `STRIPE_PAYMENT_LINK_URL`, `STRIPE_PAYMENT_LINK_ID` and `STRIPE_API_KEY` with the live values, then click **Sync donations now**. The **Overview** tab should say the donate buttons use your live link.
+
+Locally, the dev server fakes Stripe with a few demo donations.
 
 ## Privacy and security
 
 - **Private log links:** 24 random characters per student. They're never shown on donation pages, the pages send no `Referer`, and they're excluded from search engines. If one leaks, **New log link** in admin replaces it; the donation link stays the same.
 - **Donation links:** they use a separate 6-character code and show only first name + last initial by default, plus whatever the student chose to show.
 - **Spreadsheet safety:** all text is stored with a leading apostrophe, so student input can never become a spreadsheet formula.
+- **Stripe key:** the only Stripe secret is a restricted, read-only key in Script Properties. It can't charge, refund or change anything. Donor names and emails aren't copied out of Stripe.
+- **What a compromised organizer account can't do:** where the donate button points (`STRIPE_PAYMENT_LINK_URL`) and the site address in emails (always `https://readathon.bishopschoolpto.com`) aren't settings, so an organizer account or a spreadsheet editor can't change them. Email reply-to addresses must be `@bishopschoolpto.com`, and that's checked again before every send, so typing another address into the Settings tab does nothing. Script Properties can only be changed by people who can edit the Apps Script project, so keep that list to one or two people.
 - **Organizer access:** organizers are the data spreadsheet's editors, signed in with Google and checked on every admin request (see step 2). Google's ID token lasts about an hour. The browser keeps it in `sessionStorage` until the tab closes, and when it expires the page asks the organizer to sign in again.
+- **Family emails** are visible only on the student's private page and to organizers, never on donation pages. Emails carry the private log link, so they go only to the addresses listed for that student.
 - **Spreadsheet editors see everything:** they can read every private log link in the Students tab whether or not they use `/admin`, so share the data spreadsheet only with organizers. The roster spreadsheet is separate and can be shared more widely.
 
 ## Local development

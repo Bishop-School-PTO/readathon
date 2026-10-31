@@ -62,7 +62,9 @@ test('student logs minutes, picks a book, and hides things from the donation pag
   await expect(donate.locator('#shelf .title')).toHaveText("Charlotte's Web");
   await expect(donate.locator('#shelf img.cover')).toBeVisible();
   await expect(donate.locator('#goal-card')).toContainText('300 minutes');
-  await expect(donate.locator('#widget a')).toContainText(`Donate in honor of ${s.firstName}`);
+  await expect(donate.locator('#donate-link')).toHaveText(`Donate in honor of ${s.firstName}`);
+  await expect(donate.locator('#donate-link')).toHaveAttribute('href',
+    `https://donate.stripe.com/test_00wbJ2ebP3zB8pObgZcjS00?client_reference_id=${s.code}`);
 
   // Hide the reading list and minutes, then check the donation page again.
   await page.getByLabel('Show my reading list').uncheck();
@@ -70,7 +72,7 @@ test('student logs minutes, picks a book, and hides things from the donation pag
   await page.getByLabel("Show how many minutes I've read").uncheck();
   await expect(page.locator('#prefs-status')).toHaveText('Saved ✓');
   await donate.reload();
-  await expect(donate.locator('#widget a')).toBeVisible();
+  await expect(donate.locator('#donate-link')).toBeVisible();
   await expect(donate.locator('#reading')).toBeHidden();
   await expect(donate.locator('#goal-card')).toBeHidden();
   await expect(donate.locator('.stat')).toHaveCount(1); // class minutes only
@@ -83,14 +85,14 @@ test('bad links show a friendly error', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('could not find');
 });
 
-test('organizer configures the donation widget with template values', async ({ page, request }) => {
+test('organizer signs in, sees the donation link status, and can only use a PTO reply-to', async ({ page, request }) => {
   const s = (await students(request))[2];
   await page.goto('/admin');
   // The dev server stands in for Google: only DEV_ADMINS count as spreadsheet editors.
-  await page.getByLabel('Email').fill('parent@example.com');
+  await page.getByLabel('Email', { exact: true }).fill('parent@example.com');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.locator('#login-status')).toContainText("doesn't have edit access");
-  await page.getByLabel('Email').fill('organizer@example.com');
+  await page.getByLabel('Email', { exact: true }).fill('organizer@example.com');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.locator('#overview-stats')).toContainText('total minutes');
   await expect(page.locator('#who')).toHaveText('organizer@example.com');
@@ -103,20 +105,21 @@ test('organizer configures the donation widget with template values', async ({ p
   await page.getByPlaceholder(/Search by name/).fill(s.code);
   await expect(page.locator('#student-rows tr')).toHaveCount(1);
 
-  await page.getByRole('tab', { name: 'Donation widget' }).click();
-  await page.getByLabel('Donation widget HTML').fill(
-    '<p id="w">For {studentName} in grade {studentGrade} ({studentTeacher})</p>' +
-    '<script>document.getElementById("w").dataset.ran = {studentFirstName:json};</script>');
-  await page.getByRole('button', { name: 'Save widget' }).click();
-  await expect(page.locator('#widget-status')).toHaveText('Saved ✓');
+  // Donate buttons come from Script Properties; the dev server uses the test-mode link.
+  await expect(page.locator('#donation-link-status')).toContainText('test-mode link');
+
+  // Replies can only go to the PTO's own domain.
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.getByLabel(/Reply-to address/).fill('someone@gmail.com');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.locator('#settings-status')).toHaveText('The reply-to address must be an @bishopschoolpto.com email address.');
+  await page.getByLabel(/Reply-to address/).fill('readathon@bishopschoolpto.com');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.locator('#settings-status')).toHaveText('Saved ✓');
+  await expect(page.getByLabel(/Site URL/)).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { name: 'Organizer sign in' })).toBeVisible();
-
-  await page.goto('/d/' + s.code);
-  const w = page.locator('#widget #w');
-  await expect(w).toHaveText(`For ${s.firstName} ${s.lastName[0]}. in grade ${s.grade} (${s.teacher})`);
-  await expect(w).toHaveAttribute('data-ran', s.firstName); // widget scripts execute
 });
 
 test('home page shows school totals', async ({ page }) => {
@@ -125,3 +128,101 @@ test('home page shows school totals', async ({ page }) => {
   await expect(page.getByText('minutes read school-wide')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Class leaderboard' })).toBeVisible();
 });
+
+test('family emails get the links, organizers resend them, and weekly updates can be stopped', async ({ page, request }) => {
+  const s = (await students(request))[3];
+  await page.goto('/s/' + s.token);
+  await page.getByLabel('Family email 1', { exact: true }).fill('mom@example.com');
+  await page.getByLabel('Weekly updates for family email 1').check();
+  await page.getByLabel('Family email 2', { exact: true }).fill('dad@example.com');
+  await page.getByRole('button', { name: 'Save emails' }).click();
+  await expect(page.locator('#contacts-status')).toContainText('emailed the links to 2 new addresses');
+
+  const outbox = async () => (await (await request.get('/dev/outbox')).json()).filter((m) => m.body.includes(s.token));
+  let mail = await outbox();
+  expect(mail.map((m) => m.to).sort()).toEqual(['dad@example.com', 'mom@example.com']);
+  expect(mail[0].body).toContain('/d/' + s.code);
+
+  // Organizer sees the emails and resends the links, confirming the count first.
+  const dialogs = [];
+  page.on('dialog', (d) => { dialogs.push(d.message()); d.accept(); });
+  await page.goto('/admin');
+  await page.getByLabel('Email', { exact: true }).fill('organizer@example.com');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('tab', { name: 'Students & links' }).click();
+  await expect(page.locator('[data-panel=students] .quota')).toContainText('Emails left today:');
+  await page.getByPlaceholder(/Search by name/).fill('mom@example.com');
+  await expect(page.locator('#student-rows > tr')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Emails (2)' }).click();
+  await expect(page.getByLabel('Family email 1', { exact: true })).toHaveValue('mom@example.com');
+  await page.getByRole('button', { name: 'Resend links to all' }).click();
+  await expect(page.locator('.contacts-editor .status')).toHaveText('2 email(s) sent.');
+  expect(dialogs.pop()).toMatch(/^Send 2 email\(s\) to the families of 1 student\(s\)\?\n\nEmails left today: \d+\.$/);
+  expect((await outbox()).length).toBe(4);
+
+  // Bulk send: everyone with an address already has their links.
+  await page.getByRole('button', { name: 'Email links to families' }).click();
+  await expect(page.locator('#sync-notice')).toContainText('Nothing to send');
+
+  // The weekly update's unsubscribe link (dev seed: the readathon is under way).
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: "Send this week's updates now" }).click();
+  await expect(page.locator('#weekly-status')).toContainText('email(s) sent');
+  expect(dialogs.pop()).toMatch(/^Send \d+ email\(s\) to the families of \d+ student\(s\)\?/);
+  mail = (await outbox()).find((m) => m.to === 'mom@example.com' && /this week/.test(m.subject));
+  const link = /(\/unsubscribe\.html\?k=\w+)/.exec(mail.body)[1];
+  await page.goto(link);
+  await page.getByRole('button', { name: 'Stop weekly updates' }).click();
+  await expect(page.locator('#status')).toContainText("mom@example.com won't get weekly updates");
+  await page.goto('/s/' + s.token);
+  await expect(page.getByLabel('Weekly updates for family email 1')).not.toBeChecked();
+});
+
+test('money raised: school totals by grade and class, and per student only when the student opts in', async ({ page, request }) => {
+  // Dev server's fake Stripe: $25 for the first student, a fully refunded gift, one unattributed $20...
+  const s = (await students(request))[0];
+  await page.goto('/');
+  await expect(page.locator('.stat').filter({ hasText: 'raised for the PTO' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Raised by grade' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Raised by class' })).toBeVisible();
+  await expect(page.locator('tr', { hasText: s.teacher }).last()).toContainText('$');
+
+  await page.goto('/d/' + s.code);
+  await expect(page.locator('#donate-link')).toHaveAttribute('href', /donate\.stripe\.com\/.*client_reference_id=/);
+  await expect(page.getByText(/raised for/)).toHaveCount(0); // off by default
+
+  await page.goto('/s/' + s.token);
+  await expect(page.locator('#raised-stat')).toContainText('$25');
+  await page.getByLabel('Show how much money has been raised for me').check();
+  await expect(page.locator('#prefs-status')).toHaveText('Saved ✓');
+  await page.goto('/d/' + s.code);
+  await expect(page.locator('.stat').first()).toContainText('$25');
+  await expect(page.locator('.stat').first()).toContainText(`raised for ${s.firstName}'s readathon`);
+
+  // Organizers can hide totals from the site.
+  await page.goto('/admin');
+  await page.getByLabel('Email', { exact: true }).fill('organizer@example.com');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.locator('#donation-status')).toContainText('Last synced');
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.getByLabel(/Show money raised on the site/).uncheck();
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.locator('#settings-status')).toHaveText('Saved ✓');
+  await page.goto('/');
+  await expect(page.getByText('minutes read school-wide')).toBeVisible();
+  await expect(page.getByText(/raised/i)).toHaveCount(0);
+  await page.goto('/d/' + s.code);
+  await expect(page.locator('#donate-link')).toBeVisible();
+  await expect(page.getByText(/raised for/)).toHaveCount(0);
+});
+
+test('a donation page with no minutes or books yet shows neither section', async ({ page, request }) => {
+  const s = (await students(request))[5]; // odd index: no demo minutes
+  await page.goto('/d/' + s.code);
+  await expect(page.locator('#donate-link')).toBeVisible();
+  await expect(page.getByText('minutes read', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('books finished')).toHaveCount(0);
+  await expect(page.locator('#reading')).toBeHidden();
+  await expect(page.locator('.stat')).toHaveCount(1); // the class's minutes
+});
+

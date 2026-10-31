@@ -29,13 +29,18 @@
       '. Your gift helps our school — and cheers ' + s.firstName + ' on!');
 
     renderStats(data);
-    injectHtml($('#widget'), data.widgetHtml || '');
-    $('#donate-card').hidden = !String(data.widgetHtml || '').trim();
+    if (data.donateUrl) {
+      bind('donateText', 'Every gift supports the ' + settings.schoolName + ' PTO. Thank you for cheering on ' + s.firstName + '!');
+      $('#donate-link').href = data.donateUrl;
+      $('#donate-link').textContent = 'Donate in honor of ' + s.firstName;
+      $('#donate-card').hidden = false;
+    }
     if (data.books) renderBooks(data.books);
   }
 
   function renderStats(data) {
     var tiles = [];
+    if (data.raised !== undefined) tiles.push([RA.money(data.raised), 'raised for ' + data.student.firstName + "'s readathon"]);
     if (data.totalMinutes !== undefined) {
       tiles.push([RA.fmt(data.totalMinutes), 'minutes read']);
       tiles.push([RA.fmt(data.daysRead), 'days of reading']);
@@ -91,30 +96,5 @@
         shelf.appendChild(li);
       });
     }
-  }
-
-  /**
-   * Inserts the organizer's widget HTML. Scripts set via innerHTML don't run,
-   * so each <script> is re-created (in order) to execute embeds like
-   * Givebutter, Zeffy or PayPal buttons.
-   */
-  function injectHtml(container, html) {
-    container.innerHTML = html;
-    var scripts = Array.prototype.slice.call(container.querySelectorAll('script'));
-    (function next() {
-      var old = scripts.shift();
-      if (!old) return;
-      var s = document.createElement('script');
-      Array.prototype.forEach.call(old.attributes, function (a) { s.setAttribute(a.name, a.value); });
-      if (old.src) {
-        s.async = false;
-        s.onload = s.onerror = next;
-        old.replaceWith(s);
-      } else {
-        s.textContent = old.textContent;
-        old.replaceWith(s);
-        next();
-      }
-    })();
   }
 })();

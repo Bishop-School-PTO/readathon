@@ -41,6 +41,7 @@
       <div class="stat"><div class="value" data-bind="daysRead">0</div><div class="label">days I've read</div></div>
       <div class="stat"><div class="value" data-bind="booksFinished">0</div><div class="label">books finished</div></div>
       <div class="stat"><div class="value" data-bind="classMinutes">0</div><div class="label">minutes my class has read</div></div>
+      <div class="stat" id="raised-stat" hidden><div class="value" data-bind="raised">$0</div><div class="label">raised for my readathon</div></div>
     </div>
 
     <div class="card" id="goal-card" hidden>
@@ -124,12 +125,25 @@
         <label class="toggle"><input type="checkbox" name="showReadingList"> Show my reading list</label>
         <label class="toggle"><input type="checkbox" name="showTotalMinutes"> Show how many minutes I've read</label>
         <label class="toggle"><input type="checkbox" name="showClassMinutes"> Show how many minutes my class has read</label>
+        <label class="toggle" id="show-raised"><input type="checkbox" name="showRaised"> Show how much money has been raised for me</label>
         <div class="field" style="max-width:260px; margin-top:.5rem">
           <label for="goal-minutes">My reading goal (minutes)</label>
           <input id="goal-minutes" name="goalMinutes" type="number" min="0" step="10" inputmode="numeric" placeholder="e.g. 600">
         </div>
       </form>
       <p class="status" id="prefs-status" role="status"></p>
+    </section>
+
+    <section class="card">
+      <h2>Family emails</h2>
+      <p class="muted small">Add up to 5 grown-ups' emails. We'll email them this reading log link and the donation page link, so they can help log minutes and share the donation page.</p>
+      <form id="contacts-form">
+        <div id="contact-rows"></div>
+        <div class="row" style="margin-top:.5rem">
+          <button class="btn btn-primary" type="submit">Save emails</button>
+          <span class="status" id="contacts-status" role="status"></span>
+        </div>
+      </form>
     </section>
   </template>
   <script src="/config.js"></script>

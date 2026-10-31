@@ -37,9 +37,10 @@
       <div class="progress"><span data-bind="goalBar"></span></div>
     </div>
 
-    <section class="card" id="donate-card">
+    <section class="card" id="donate-card" hidden>
       <h2>Make a donation</h2>
-      <div class="widget" id="widget"></div>
+      <p data-bind="donateText"></p>
+      <a class="btn btn-primary btn-donate" id="donate-link" target="_blank" rel="noopener"></a>
     </section>
 
     <section id="reading" hidden>
