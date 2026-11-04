@@ -47,7 +47,7 @@ function setup(today = '2026-10-09') {
       env.stripeCalls.push(q);
       if (env.stripeError) throw new Error(env.stripeError);
       assert.strictEqual(path, '/v1/checkout/sessions');
-      assert.strictEqual(q.payment_link, 'plink_test');
+      assert.strictEqual(q.payment_link, undefined); // all sessions: the link's and the embedded form's
       assert.strictEqual(q.status, 'complete');
       const start = q.starting_after ? env.sessions.findIndex((x) => x.id === q.starting_after) + 1 : 0;
       return { data: env.sessions.slice(start, start + 2), has_more: start + 2 < env.sessions.length };
@@ -368,7 +368,8 @@ test('weekly updates wait for the readathon to start and can be turned off', () 
 });
 
 function session(id, code, cents, extra = {}) {
-  return { id, client_reference_id: code, amount_total: cents, currency: 'usd', payment_status: 'paid', created: 1791500000, ...extra };
+  return { id, client_reference_id: code, amount_total: cents, currency: 'usd', payment_status: 'paid', created: 1791500000,
+    payment_link: 'plink_test', metadata: {}, ...extra };
 }
 
 test('donations sync from Stripe: refunds, unpaid and foreign-currency payments, totals by student, grade and class', () => {
@@ -404,6 +405,22 @@ test('donations sync from Stripe: refunds, unpaid and foreign-currency payments,
   // A refund made later is picked up by the next sync.
   env.sessions[0].payment_intent = { latest_charge: { amount: 2500, amount_refunded: 2500 } };
   assert.strictEqual(ok('admin.syncDonations', ADMIN).total, 8600);
+});
+
+test('donation sync counts the embedded form\'s sessions and skips the account\'s other payments', () => {
+  const { ok, env, students } = setup();
+  const s = students[1];
+  env.sessions = [
+    session('cs_link', s.code, 2500),
+    session('cs_embedded', s.code, 4000, { payment_link: null, metadata: { app: 'readathon.bishopschoolpto.com', source: 'embedded' } }),
+    session('cs_other_link', s.code, 9900, { payment_link: 'plink_other' }),
+    session('cs_untagged', s.code, 7700, { payment_link: null }),
+    session('cs_other_app', s.code, 6600, { payment_link: null, metadata: { app: 'bake-sale' } }),
+  ];
+  const r = ok('admin.syncDonations', ADMIN);
+  assert.strictEqual(r.sessions, 2);
+  assert.strictEqual(r.total, 6500);
+  assert.strictEqual(ok('student.get', { token: s.token }).raised, 6500);
 });
 
 test('donation totals: hidden until synced, organizers can turn them off, per-student amounts are opt-in', () => {

@@ -171,6 +171,37 @@ Only payments that Stripe marks `paid` count, minus refunds. Bank payments that 
 
 Locally, the dev server fakes Stripe with a few demo donations.
 
+### Embedded donation form (optional)
+
+Adding `?checkout=embedded` to a donation link (`/d/<code>?checkout=embedded`) shows Stripe's payment form on the donation page instead of the **Donate** button. Without the parameter, or until everything below is set up, donation pages keep using the Payment Link. Both count toward the same totals.
+
+The form needs a small server to create each Stripe Checkout Session, and Apps Script can't do that from a static page. So it runs as a **Cloudflare Worker** (`worker/`, free plan). The Worker:
+
+- checks a **Cloudflare Turnstile** token before every session, so bots can't use the form to test stolen cards;
+- creates the session for the same "customer chooses what to pay" price as the Payment Link, tagged with the student code and `metadata.app = readathon.bishopschoolpto.com`;
+- tells the page whether a returning donor's payment went through.
+
+It stores nothing. The Apps Script sync counts sessions from the Payment Link and sessions with that tag. To do that, it reads all of the Stripe account's completed Checkout Sessions, so on an account with many other sales it takes longer.
+
+Set it up:
+
+1. **Turnstile:** in the Cloudflare dashboard, go to **Turnstile → Add widget**. Add the hostname `readathon.bishopschoolpto.com` and choose **Managed** mode. Note the site key and secret key.
+2. **Stripe key for the Worker:** create a restricted key with **Checkout Sessions: Write** and nothing else. If creating a session fails with a permissions error in the Worker's logs, also give it **Read** on **Prices** and **Products**. Use a sandbox key (`rk_test_…`) until you go live.
+3. **Deploy the Worker:**
+   ```bash
+   npx wrangler login
+   npx wrangler secret put STRIPE_SECRET_KEY --config worker/wrangler.jsonc
+   npx wrangler secret put TURNSTILE_SECRET_KEY --config worker/wrangler.jsonc
+   npm run worker:deploy
+   ```
+   `worker/wrangler.jsonc` holds the non-secret settings: the price ID (sandbox now, so change it when going live), the site URL, and the allowed origin and Turnstile hostname.
+4. **Turn it on in `public/config.js`:** set `checkoutApiUrl` to the Worker's URL (`https://readathon-checkout.<account>.workers.dev`), `stripePublishableKey` to the `pk_test_…`/`pk_live_…` key from **Developers → API keys** (same mode as the Worker's key), and `turnstileSiteKey`. Push to deploy the site.
+5. **Push the Apps Script code** so its donation sync counts the embedded sessions.
+
+Going live means a live price ID in `wrangler.jsonc`, a live restricted key as the Worker's `STRIPE_SECRET_KEY`, and a live publishable key in `config.js`, all at the same time.
+
+**Locally:** copy `worker/.dev.vars.example` to `worker/.dev.vars` and put a sandbox key in it. Run `npm run worker:dev`, then `DEV_CHECKOUT_API_URL=http://localhost:8787 DEV_STRIPE_PK=pk_test_… npm run dev`. The dev server uses Turnstile's always-passes test key. Open a donation page with `?checkout=embedded` and pay with `4242 4242 4242 4242`.
+
 ## Privacy and security
 
 - **Private log links:** 24 random characters per student. They're never shown on donation pages, the pages send no `Referer`, and they're excluded from search engines. If one leaks, **New log link** in admin replaces it; the donation link stays the same.

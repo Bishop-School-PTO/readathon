@@ -1,0 +1,19 @@
+// Cloudflare Worker for the embedded donation form. See README "Embedded donation form".
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "readathon-checkout",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "vars": {
+    // The "customer chooses what to pay" price behind the donation Payment Link.
+    // Sandbox price; replace with the live price ID when going live.
+    "STRIPE_PRICE_ID": "price_1UVse8K9lkVDlZj3IHBo7EM9",
+    "SITE_URL": "https://readathon.bishopschoolpto.com",
+    "ALLOWED_ORIGINS": "https://readathon.bishopschoolpto.com",
+    "TURNSTILE_HOSTNAMES": "readathon.bishopschoolpto.com"
+  }
+  // Secrets (not in this file): npx wrangler secret put STRIPE_SECRET_KEY
+  //                             npx wrangler secret put TURNSTILE_SECRET_KEY
+}

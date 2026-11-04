@@ -2,6 +2,9 @@
 //   PORT=8082  DEV_DATA=dev/data.json (or ":memory:")  DEV_TODAY=2026-10-09
 //   DEV_ADMINS=organizer@example.com   comma-separated stand-ins for the spreadsheet's editors
 //   DEV_EMAIL_QUOTA=1000               emails "Google" allows per run of the server
+//   DEV_CHECKOUT_API_URL=http://localhost:8787  DEV_STRIPE_PK=pk_test_...
+//                                      turn on the embedded donation form (?checkout=embedded)
+//                                      against `npm run worker:dev`. Uses Turnstile's test site key.
 //
 // There's no Google sign-in locally: the admin page sends "dev:<email>" as its ID token.
 // Emails aren't sent: they're printed and kept in memory, readable at GET /dev/outbox.
@@ -63,7 +66,12 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/config.js') {
     res.writeHead(200, { 'Content-Type': TYPES['.js'], 'Cache-Control': 'no-store' });
-    return res.end("window.READATHON_CONFIG = { apiUrl: '/api', devSignIn: true };\n");
+    const cfg = { apiUrl: '/api', devSignIn: true };
+    if (process.env.DEV_CHECKOUT_API_URL && process.env.DEV_STRIPE_PK) {
+      Object.assign(cfg, { checkoutApiUrl: process.env.DEV_CHECKOUT_API_URL, stripePublishableKey: process.env.DEV_STRIPE_PK,
+        turnstileSiteKey: '1x00000000000000000000AA' }); // Cloudflare's always-passes test key
+    }
+    return res.end('window.READATHON_CONFIG = ' + JSON.stringify(cfg) + ';\n');
   }
   // Same rewrites as public/_redirects.
   let file = url.pathname;
@@ -97,16 +105,19 @@ function api(req, res, url) {
 
 // Completed Checkout Sessions as Stripe's API would list them, newest first, 3 per page.
 function fakeStripeGet(apiPath, q) {
-  if (apiPath !== '/v1/checkout/sessions' || q.payment_link !== 'plink_dev') throw new Error('Unexpected Stripe call');
+  if (apiPath !== '/v1/checkout/sessions' || q.status !== 'complete') throw new Error('Unexpected Stripe call');
   const sessions = [];
   store.readTable('Students').rows.forEach((row, i) => {
     if (i % 3) return;
     const cents = [2500, 5000, 1000, 10000][i % 4];
+    // Every other gift came through the embedded form rather than the Payment Link.
+    const via = i % 2 ? { payment_link: null, metadata: { app: 'readathon.bishopschoolpto.com' } } : { payment_link: 'plink_dev' };
     sessions.push({ id: 'cs_dev_' + i, client_reference_id: row[5], amount_total: cents, currency: 'usd', payment_status: 'paid',
-      created: 1791500000 + i, payment_intent: { latest_charge: { amount: cents, amount_refunded: i === 6 ? cents : 0 } } });
+      created: 1791500000 + i, payment_intent: { latest_charge: { amount: cents, amount_refunded: i === 6 ? cents : 0 } }, ...via });
   });
-  sessions.push({ id: 'cs_dev_general', client_reference_id: null, amount_total: 2000, currency: 'usd', payment_status: 'paid', created: 1791400000 });
-  sessions.push({ id: 'cs_dev_pending', client_reference_id: 'NOPE', amount_total: 5000, currency: 'usd', payment_status: 'unpaid', created: 1791300000 });
+  sessions.push({ id: 'cs_dev_general', payment_link: 'plink_dev', client_reference_id: null, amount_total: 2000, currency: 'usd', payment_status: 'paid', created: 1791400000 });
+  sessions.push({ id: 'cs_dev_pending', payment_link: 'plink_dev', client_reference_id: 'NOPE', amount_total: 5000, currency: 'usd', payment_status: 'unpaid', created: 1791300000 });
+  sessions.push({ id: 'cs_dev_bakesale', payment_link: 'plink_other', client_reference_id: null, amount_total: 99900, currency: 'usd', payment_status: 'paid', created: 1791200000 });
   const start = q.starting_after ? sessions.findIndex((x) => x.id === q.starting_after) + 1 : 0;
   return { object: 'list', data: sessions.slice(start, start + 3), has_more: start + 3 < sessions.length };
 }

@@ -2,6 +2,12 @@
 (function () {
   var app = document.getElementById('app');
   var code = RA.routeParam('d', 'c');
+  var config = window.READATHON_CONFIG || {};
+  var query = new URLSearchParams(location.search);
+  // ?checkout=embedded shows Stripe's payment form on this page instead of linking out,
+  // once the Cloudflare Worker, Stripe publishable key and Turnstile site key are configured.
+  var embedded = query.get('checkout') === 'embedded' &&
+    !!(config.checkoutApiUrl && config.stripePublishableKey && config.turnstileSiteKey);
 
   if (!code) return RA.showError(app, 'This link is missing the reader code.');
 
@@ -34,8 +40,123 @@
       $('#donate-link').href = data.donateUrl;
       $('#donate-link').textContent = 'Donate in honor of ' + s.firstName;
       $('#donate-card').hidden = false;
+      if (embedded) setupEmbedded(s, data.donateUrl);
     }
     if (data.books) renderBooks(data.books);
+  }
+
+  // ---- Embedded Stripe Checkout (?checkout=embedded) ----
+
+  var STRIPE_JS = 'https://js.stripe.com/endive/stripe.js';
+  var TURNSTILE_JS = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+
+  function setupEmbedded(s, fallbackUrl) {
+    var workerUrl = String(config.checkoutApiUrl).replace(/\/+$/, '');
+    var studentCode = String(s.code || code).toUpperCase();
+    var widgetId = null;
+    var mounting = false;
+
+    $('#donate-link').hidden = true;
+    $('#embedded-donate').hidden = false;
+    $('#checkout-fallback-link').href = fallbackUrl;
+
+    var stripeReady = loadScript(STRIPE_JS);
+    var sessionId = query.get('session_id');
+    var check = sessionId ? checkReturn(sessionId) : Promise.resolve(false);
+    check.then(function (done) {
+      if (done) return;
+      return loadScript(TURNSTILE_JS).then(function () {
+        widgetId = window.turnstile.render($('#turnstile'), {
+          sitekey: config.turnstileSiteKey,
+          action: 'donate',
+          appearance: 'interaction-only', // most visitors never see a challenge
+          callback: mount,
+          'error-callback': function () {
+            fail(new Error('We could not confirm you are a person. Please refresh the page and try again.'));
+            return true;
+          },
+        });
+      });
+    }).catch(fail);
+
+    /** Back from Stripe: thank the donor, or show the form again if the payment didn't finish. */
+    function checkReturn(id) {
+      query.delete('session_id');
+      history.replaceState(null, '', location.pathname + '?' + query.toString());
+      return fetch(workerUrl + '/session-status?session_id=' + encodeURIComponent(id))
+        .then(readJson)
+        .then(function (st) {
+          if (st.status !== 'complete') {
+            message('Your payment didn\'t go through. You can try again below.');
+            return false;
+          }
+          $('#donate-card h2').textContent = 'Thank you!';
+          bind('donateText', st.paymentStatus === 'paid'
+            ? 'Your gift in honor of ' + s.firstName + ' was received. Thank you for cheering on ' + s.firstName + '!'
+            : 'Your gift in honor of ' + s.firstName + ' is processing. It will count once your bank payment clears.');
+          return true;
+        })
+        .catch(function () { return false; }); // can't tell; offer the form again
+    }
+
+    function mount(token) {
+      if (mounting) return;
+      mounting = true;
+      stripeReady.then(function () {
+        return window.Stripe(config.stripePublishableKey).createEmbeddedCheckoutPage({
+          fetchClientSecret: function () {
+            return fetch(workerUrl + '/checkout-session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code: studentCode, turnstileToken: token }),
+            }).then(readJson).then(function (out) { return out.clientSecret; });
+          },
+        });
+      }).then(function (checkout) {
+        window.turnstile.remove(widgetId);
+        $('#turnstile').hidden = true;
+        if ($('#checkout-msg').classList.contains('error')) message(''); // an earlier attempt's error
+        checkout.mount('#checkout');
+      }).catch(function (err) {
+        mounting = false;
+        fail(err);
+        if (widgetId !== null) window.turnstile.reset(widgetId); // tokens are single-use
+      });
+    }
+
+    function fail(err) {
+      message((err && err.message) || 'Something went wrong. Please try again.', true);
+      $('#checkout-fallback').hidden = false;
+    }
+  }
+
+  function message(text, isError) {
+    var el = $('#checkout-msg');
+    el.textContent = text;
+    el.hidden = !text;
+    el.classList.toggle('error', !!isError);
+  }
+
+  function readJson(res) {
+    return res.json().catch(function () { return {}; }).then(function (out) {
+      if (!res.ok) throw new Error(out.error || 'Could not reach the payment server. Please try again.');
+      return out;
+    });
+  }
+
+  var scripts = {};
+  function loadScript(src) {
+    if (!scripts[src]) {
+      scripts[src] = new Promise(function (resolve, reject) {
+        var el = document.createElement('script');
+        el.src = src;
+        el.async = true;
+        el.onload = resolve;
+        el.onerror = function () { delete scripts[src]; reject(new Error('Could not load the payment form. Please check your connection.')); };
+        document.head.appendChild(el);
+      });
+    }
+    return scripts[src];
   }
 
   function renderStats(data) {

@@ -41,6 +41,13 @@
       <h2>Make a donation</h2>
       <p data-bind="donateText"></p>
       <a class="btn btn-primary btn-donate" id="donate-link" target="_blank" rel="noopener"></a>
+      <!-- Shown instead of the button with ?checkout=embedded (see js/donate.js). -->
+      <div id="embedded-donate" hidden>
+        <div class="notice" id="checkout-msg" role="status" hidden></div>
+        <div id="turnstile"></div>
+        <div id="checkout"></div>
+        <p class="muted" id="checkout-fallback" hidden>Having trouble? <a id="checkout-fallback-link" target="_blank" rel="noopener">Donate on Stripe's page instead</a>.</p>
+      </div>
     </section>
 
     <section id="reading" hidden>

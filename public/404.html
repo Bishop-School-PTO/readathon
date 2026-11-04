@@ -9,7 +9,9 @@
     // Fallback for static hosts without rewrites (e.g. GitHub Pages): map pretty URLs to pages.
     (function () {
       var m = location.pathname.match(/^\/(s|d)\/([^/]+)\/?$/);
-      if (m) location.replace((m[1] === 's' ? '/student.html#' : '/donate.html?c=') + encodeURIComponent(m[2]));
+      // Keep the query string, e.g. /d/<code>?checkout=embedded.
+      var extra = location.search ? '&' + location.search.slice(1) : '';
+      if (m) location.replace(m[1] === 's' ? '/student.html#' + encodeURIComponent(m[2]) : '/donate.html?c=' + encodeURIComponent(m[2]) + extra);
       else if (/^\/admin\/?$/.test(location.pathname)) location.replace('/admin.html');
     })();
   </script>

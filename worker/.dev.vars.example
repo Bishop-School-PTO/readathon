@@ -1,0 +1,8 @@
+# Copy to worker/.dev.vars for `npm run worker:dev`. Overrides wrangler.jsonc vars locally.
+# Stripe sandbox restricted key (rk_test_...) with Checkout Sessions: Write.
+STRIPE_SECRET_KEY=rk_test_replace_me
+# Cloudflare's Turnstile test secret: every token passes.
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+SITE_URL=http://localhost:8082
+ALLOWED_ORIGINS=http://localhost:8082
+TURNSTILE_HOSTNAMES=

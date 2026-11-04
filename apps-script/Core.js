@@ -40,6 +40,8 @@ var REPLY_TO_DOMAIN = 'bishopschoolpto.com';
 // The donate button only ever points at a Stripe-hosted Payment Link, which
 // comes from Script Properties rather than the spreadsheet.
 var DONATION_LINK_RE = /^https:\/\/(donate|buy)\.stripe\.com\/[A-Za-z0-9_]+$/;
+// The embedded donation form's Cloudflare Worker (worker/) tags its Checkout Sessions with this.
+var EMBEDDED_CHECKOUT_TAG = 'readathon.bishopschoolpto.com';
 
 var DEFAULT_SETTINGS = {
   readathonTitle: 'Bishop Readathon',
@@ -1472,7 +1474,9 @@ function donationRow(session) {
 
 /**
  * Rewrites the Donations tab from Stripe: every completed Checkout Session of
- * the donation Payment Link, with refunds applied. Re-reading everything each
+ * the donation Payment Link or of the embedded donation form (metadata.app tag),
+ * with refunds applied. The list can't be filtered to both at once, so this reads
+ * all of the account's completed sessions and skips the rest. Re-reading everything each
  * time also picks up bank payments that clear later. No webhooks, because
  * Apps Script can't read the signature header needed to verify them.
  */
@@ -1485,12 +1489,13 @@ function syncDonations(ctx) {
   try {
     var after = '';
     for (var page = 0; page < STRIPE_MAX_PAGES; page++) {
-      var q = { payment_link: linkId, status: 'complete', limit: 100, 'expand[]': 'data.payment_intent.latest_charge' };
+      var q = { status: 'complete', limit: 100, 'expand[]': 'data.payment_intent.latest_charge' };
       if (after) q.starting_after = after;
       var res = ctx.env.stripeGet('/v1/checkout/sessions', q);
       (res.data || []).forEach(function (sess) {
-        rows.push(donationRow(sess));
         after = sess.id;
+        var embedded = sess.metadata && str(sess.metadata.app) === EMBEDDED_CHECKOUT_TAG;
+        if (str(sess.payment_link) === linkId || embedded) rows.push(donationRow(sess));
       });
       if (!res.has_more || !after) break;
     }

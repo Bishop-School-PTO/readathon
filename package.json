@@ -4,16 +4,22 @@
   "description": "School-wide readathon: student reading logs, donation pages, and an organizer dashboard backed by Google Sheets.",
   "scripts": {
     "dev": "node dev/server.js",
-    "test": "node --test tests/unit/core.test.js",
+    "test": "node --test tests/unit/core.test.js tests/unit/worker.test.mjs",
     "test:ui": "playwright test",
     "gas:login": "clasp login --no-localhost",
     "gas:create": "clasp create-script --type standalone --title \"Readathon API\" --rootDir apps-script",
     "gas:push": "clasp push --force",
     "gas:deploy": "clasp create-deployment --description \"Readathon API\"",
-    "gas:redeploy": "clasp update-deployment"
+    "gas:redeploy": "clasp update-deployment",
+    "worker:dev": "wrangler dev --config worker/wrangler.jsonc",
+    "worker:deploy": "wrangler deploy --config worker/wrangler.jsonc"
   },
   "devDependencies": {
     "@google/clasp": "^3.4.1",
-    "@playwright/test": "^1.59.1"
+    "@playwright/test": "^1.59.1",
+    "wrangler": "^4.157.0"
+  },
+  "allowScripts": {
+    "workerd@1.20261103.1": true
   }
 }

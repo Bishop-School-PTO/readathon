@@ -226,3 +226,96 @@ test('a donation page with no minutes or books yet shows neither section', async
   await expect(page.locator('.stat')).toHaveCount(1); // the class's minutes
 });
 
+
+// Embedded donation form (?checkout=embedded), with the Worker, Turnstile and Stripe.js faked.
+const WORKER = 'https://checkout.example.workers.dev';
+
+async function stubEmbeddedCheckout(page, { configured = true, sessionStatus = 'complete', createError = null } = {}) {
+  const seen = { created: [], statusChecks: [] };
+  await page.route('**/config.js', (route) => route.fulfill({
+    contentType: 'text/javascript',
+    body: 'window.READATHON_CONFIG = ' + JSON.stringify(configured
+      ? { apiUrl: '/api', checkoutApiUrl: WORKER, stripePublishableKey: 'pk_test_x', turnstileSiteKey: '1x00000000000000000000AA' }
+      : { apiUrl: '/api' }) + ';',
+  }));
+  await page.route('https://challenges.cloudflare.com/turnstile/**', (route) => route.fulfill({
+    contentType: 'text/javascript',
+    body: `window.turnstile = {
+      render: function (el, opts) { window.__turnstileOpts = opts; setTimeout(function () { opts.callback('ts-token'); }, 0); return 'w1'; },
+      reset: function () { window.__turnstileResets = (window.__turnstileResets || 0) + 1; },
+      remove: function () {},
+    };`,
+  }));
+  await page.route('https://js.stripe.com/**', (route) => route.fulfill({
+    contentType: 'text/javascript',
+    body: `window.Stripe = function (pk) {
+      return { createEmbeddedCheckoutPage: function (opts) {
+        return opts.fetchClientSecret().then(function (secret) {
+          return { mount: function (sel) { document.querySelector(sel).textContent = 'Stripe form for ' + secret + ' with ' + pk; } };
+        });
+      } };
+    };`,
+  }));
+  await page.route(WORKER + '/**', async (route) => {
+    const req = route.request();
+    if (req.url().includes('/checkout-session')) {
+      seen.created.push(req.postDataJSON());
+      return createError
+        ? route.fulfill({ status: 403, json: { error: createError } })
+        : route.fulfill({ json: { clientSecret: 'cs_test_1_secret_x' } });
+    }
+    seen.statusChecks.push(new URL(req.url()).searchParams.get('session_id'));
+    return route.fulfill({ json: { status: sessionStatus, paymentStatus: 'paid' } });
+  });
+  return seen;
+}
+
+test('embedded donation form: only with ?checkout=embedded and a configured Worker', async ({ page, request }) => {
+  const s = (await students(request))[0];
+  let seen = await stubEmbeddedCheckout(page);
+
+  // No URL param: the usual Payment Link button.
+  await page.goto('/d/' + s.code);
+  await expect(page.locator('#donate-link')).toBeVisible();
+  await expect(page.locator('#embedded-donate')).toBeHidden();
+
+  // With it: Turnstile, then Stripe's form, created for this student with the Turnstile token.
+  await page.goto('/d/' + s.code + '?checkout=embedded');
+  await expect(page.locator('#checkout')).toHaveText('Stripe form for cs_test_1_secret_x with pk_test_x');
+  await expect(page.locator('#donate-link')).toBeHidden();
+  expect(seen.created).toEqual([{ code: s.code, turnstileToken: 'ts-token' }]);
+  expect(await page.evaluate(() => window.__turnstileOpts.action)).toBe('donate');
+
+  // Back from Stripe: thank you, and the session id is dropped from the address bar.
+  await page.goto('/donate.html?c=' + s.code + '&checkout=embedded&session_id=cs_test_abc');
+  await expect(page.getByRole('heading', { name: 'Thank you!' })).toBeVisible();
+  await expect(page.locator('#donate-card')).toContainText(`in honor of ${s.firstName} was received`);
+  await expect(page.locator('#checkout')).toBeEmpty();
+  expect(seen.statusChecks).toEqual(['cs_test_abc']);
+  expect(new URL(page.url()).searchParams.get('session_id')).toBeNull();
+
+  // Not configured: the URL param is ignored.
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await stubOpenLibrary(page);
+  seen = await stubEmbeddedCheckout(page, { configured: false });
+  await page.goto('/d/' + s.code + '?checkout=embedded');
+  await expect(page.locator('#donate-link')).toBeVisible();
+  await expect(page.locator('#embedded-donate')).toBeHidden();
+  expect(seen.created).toEqual([]);
+});
+
+test('embedded donation form: unfinished payments and Worker errors offer a way to retry', async ({ page, request }) => {
+  const s = (await students(request))[0];
+  await stubEmbeddedCheckout(page, { sessionStatus: 'open' });
+  await page.goto('/donate.html?c=' + s.code + '&checkout=embedded&session_id=cs_test_abc');
+  await expect(page.locator('#checkout-msg')).toHaveText(/didn't go through/);
+  await expect(page.locator('#checkout')).toContainText('Stripe form for');
+
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await stubOpenLibrary(page);
+  await stubEmbeddedCheckout(page, { createError: 'We could not confirm you are a person.' });
+  await page.goto('/d/' + s.code + '?checkout=embedded');
+  await expect(page.locator('#checkout-msg')).toHaveText('We could not confirm you are a person.');
+  await expect(page.locator('#checkout-fallback-link')).toHaveAttribute('href', /donate\.stripe\.com\/.*client_reference_id=/);
+  expect(await page.evaluate(() => window.__turnstileResets)).toBe(1);
+});
