@@ -5,6 +5,7 @@
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
+  "preview_urls": false,
   "observability": { "enabled": true },
   "vars": {
     // The "customer chooses what to pay" price behind the donation Payment Link.

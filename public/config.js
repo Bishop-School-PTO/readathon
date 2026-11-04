@@ -8,7 +8,8 @@
 window.READATHON_CONFIG = {
   apiUrl: 'https://script.google.com/macros/s/AKfycbyTY8HNY1eMpmVgUvF_mlPWiEajmafQjBeOSEwoG-B0hAzCZblGSW13awHJVeNQkCFd8A/exec',
   googleClientId: '69541499158-2dvtvg7bnu311kjdkrpage5j82clpued.apps.googleusercontent.com',
-  checkoutApiUrl: '',       // the Cloudflare Worker, e.g. https://readathon-checkout.<account>.workers.dev
-  stripePublishableKey: '', // pk_test_... or pk_live_..., same mode as the Worker's secret key
-  turnstileSiteKey: '',     // Cloudflare Turnstile widget site key
+  checkoutApiUrl: 'https://readathon-checkout.bishoppto.workers.dev', // Cloudflare Worker (worker/)
+  // Sandbox key: same mode as the Worker's restricted key. Switch both when going live.
+  stripePublishableKey: 'pk_test_51UVGhQK9lkVDlZj3FmlnDCugjXJyGXmRIglDYeiIjmDH2X94AHfmayVGYC4L4ivm7tm6Vy4uhpfqMbWNiYJIvvJO00CTiZ4spo',
+  turnstileSiteKey: '0x4AAAAAAFzaHzSdKsED970m', // Cloudflare Turnstile widget
 };
