@@ -14,6 +14,8 @@
   });
 
   function $(sel) { return app.querySelector(sel); }
+  // Minutes, books and what's shown all appear on the donation page, which may be cached.
+  function donationPageChanged() { RA.refreshDonationPage(state.student.code); }
   function bind(name, value) {
     app.querySelectorAll('[data-bind="' + name + '"]').forEach(function (el) { el.textContent = value; });
   }
@@ -135,6 +137,7 @@
     statusEl.textContent = 'Saving…';
     try {
       var r = await RA.api('student.setMinutes', { token: token, date: date, minutes: minutes });
+      donationPageChanged();
       dayEntry(date).minutes = r.minutes;
       state.totalMinutes = r.totalMinutes;
       state.daysRead = r.daysRead;
@@ -239,6 +242,7 @@
     if (!book.title) return setStatus(statusEl, 'Please type the book title.', false);
     try {
       var r = await RA.api('student.addBook', Object.assign({ token: token }, book));
+      donationPageChanged();
       state.books = r.books;
       renderBooks();
       done();
@@ -251,6 +255,7 @@
   async function updateBook(bookId, status, statusEl) {
     try {
       var r = await RA.api('student.updateBook', { token: token, bookId: bookId, status: status });
+      donationPageChanged();
       state.books = r.books;
       renderBooks();
       setStatus(statusEl, status === 'finished' ? 'Nice work! Added to your books.' : 'Saved ✓', true);
@@ -262,6 +267,7 @@
   async function deleteBook(bookId, statusEl) {
     try {
       var r = await RA.api('student.deleteBook', { token: token, bookId: bookId });
+      donationPageChanged();
       state.books = r.books;
       renderBooks();
       setStatus(statusEl, 'Removed', true);
@@ -339,6 +345,7 @@
     var statusEl = $('#prefs-status');
     try {
       var r = await RA.api('student.setPrefs', Object.assign({ token: token }, changes));
+      donationPageChanged();
       state.prefs = r.prefs;
       renderTotals();
       setStatus(statusEl, 'Saved ✓', true);

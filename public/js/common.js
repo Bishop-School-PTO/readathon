@@ -143,6 +143,39 @@
     }
   }
 
+  /** The Cloudflare Worker's base URL (config.checkoutApiUrl), or '' when there isn't one. */
+  function workerUrl() {
+    return String(config.checkoutApiUrl || '').replace(/\/+$/, '');
+  }
+
+  /**
+   * Donation-page data. Read through the Worker's cache when there is one (fast), and from
+   * Apps Script when there isn't or the Worker answers anything else, even a 404: an older
+   * Worker without /donation answers 404 too, and Apps Script gives the real error message.
+   */
+  async function donationData(code) {
+    var base = workerUrl();
+    if (base) {
+      try {
+        var res = await fetch(base + '/donation?c=' + encodeURIComponent(code));
+        if (res.ok) return await res.json();
+      } catch (e) { /* fall back below */ }
+    }
+    return api('donation.get', { code: code });
+  }
+
+  /** After a student saves something: refreshes their donation page in the Worker's cache. */
+  function refreshDonationPage(code) {
+    var base = workerUrl();
+    if (!base || !code) return;
+    fetch(base + '/donation/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // no CORS preflight
+      body: JSON.stringify({ code: code }),
+      keepalive: true, // still sent if the student closes the page right away
+    }).catch(function () { /* the cache refreshes itself within a minute anyway */ });
+  }
+
   function showError(container, message) {
     container.innerHTML = '<div class="notice error" role="alert">' + esc(message) + '</div>';
   }
@@ -151,5 +184,6 @@
     api: api, routeParam: routeParam, esc: esc, fmt: fmt, money: money, prettyMinutes: prettyMinutes,
     formatDate: formatDate, gradeLabel: gradeLabel, percent: percent, findCoverUrl: findCoverUrl,
     coverEl: coverEl, copyText: copyText, showError: showError,
+    donationData: donationData, refreshDonationPage: refreshDonationPage,
   };
 })();

@@ -227,9 +227,79 @@ test('a donation page with no minutes or books yet shows neither section', async
 });
 
 
-// Embedded donation form (?checkout=embedded), with the Worker, Turnstile and Stripe.js faked.
 const WORKER = 'https://checkout.example.workers.dev';
 
+// The Worker's donation-page cache, faked: /donation answers from the dev server's API
+// (or fails with `status`), and /donation/refresh calls are recorded.
+async function stubDonationCache(page, { status = 200 } = {}) {
+  const seen = { reads: [], refreshes: [] };
+  await page.route(WORKER + '/donation**', async (route) => {
+    const req = route.request();
+    if (new URL(req.url()).pathname === '/donation/refresh') {
+      seen.refreshes.push(JSON.parse(req.postData()).code);
+      return route.fulfill({ status: 202, json: { ok: true } });
+    }
+    const code = new URL(req.url()).searchParams.get('c');
+    seen.reads.push(code);
+    if (status !== 200) return route.fulfill({ status, json: { error: 'Something went wrong. Please try again.' } });
+    const res = await page.request.post('/api', { data: { action: 'donation.get', code } });
+    const out = await res.json();
+    return out.ok ? route.fulfill({ json: out.data }) : route.fulfill({ status: out.status, json: { error: out.error } });
+  });
+  return seen;
+}
+
+async function useWorker(page) {
+  await page.route('**/config.js', (route) => route.fulfill({
+    contentType: 'text/javascript',
+    body: 'window.READATHON_CONFIG = ' + JSON.stringify({ apiUrl: '/api', checkoutApiUrl: WORKER }) + ';',
+  }));
+}
+
+test('donation pages load through the Worker cache, and fall back to Apps Script', async ({ page, request }) => {
+  const s = (await students(request))[0];
+  await useWorker(page);
+  let seen = await stubDonationCache(page);
+  const apiCalls = [];
+  page.on('request', (r) => { if (r.url().endsWith('/api')) apiCalls.push(r.postDataJSON().action); });
+
+  await page.goto('/d/' + s.code);
+  await expect(page.getByRole('heading', { name: new RegExp(`Support ${s.firstName}`) })).toBeVisible();
+  expect(seen.reads).toEqual([s.code]);
+  expect(apiCalls).toEqual([]); // the Worker answered
+
+  // Unknown code: Apps Script has the last word (an older Worker without /donation answers 404 too).
+  await page.goto('/d/NOPE99');
+  await expect(page.getByRole('alert')).toContainText('could not find');
+  expect(apiCalls).toEqual(['donation.get']);
+  apiCalls.length = 0;
+
+  // Worker down: the page still loads, from Apps Script.
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await stubOpenLibrary(page);
+  await useWorker(page);
+  seen = await stubDonationCache(page, { status: 500 });
+  await page.goto('/d/' + s.code);
+  await expect(page.getByRole('heading', { name: new RegExp(`Support ${s.firstName}`) })).toBeVisible();
+  expect(seen.reads).toEqual([s.code]);
+  expect(apiCalls).toEqual(['donation.get']);
+});
+
+test('student saves refresh their donation page in the Worker cache', async ({ page, request }) => {
+  const s = (await students(request))[1];
+  await useWorker(page);
+  const seen = await stubDonationCache(page);
+  await page.goto('/s/' + s.token);
+  await page.getByLabel('Minutes read today').fill('25');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#today-status')).toHaveText('Saved ✓');
+  await page.getByLabel('My reading goal (minutes)').fill('120');
+  await page.getByLabel('My reading goal (minutes)').press('Tab');
+  await expect(page.locator('#prefs-status')).toHaveText('Saved ✓');
+  await expect.poll(() => seen.refreshes).toEqual([s.code, s.code]);
+});
+
+// Embedded donation form (?checkout=embedded), with the Worker, Turnstile and Stripe.js faked.
 async function stubEmbeddedCheckout(page, { configured = true, sessionStatus = 'complete', createError = null } = {}) {
   const seen = { created: [], statusChecks: [] };
   await page.route('**/config.js', (route) => route.fulfill({
@@ -267,6 +337,7 @@ async function stubEmbeddedCheckout(page, { configured = true, sessionStatus = '
     seen.statusChecks.push(new URL(req.url()).searchParams.get('session_id'));
     return route.fulfill({ json: { status: sessionStatus, paymentStatus: 'paid' } });
   });
+  await stubDonationCache(page); // after the route above: Playwright tries the newest route first
   return seen;
 }
 

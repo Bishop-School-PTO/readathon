@@ -2,9 +2,9 @@
 //   PORT=8082  DEV_DATA=dev/data.json (or ":memory:")  DEV_TODAY=2026-10-09
 //   DEV_ADMINS=organizer@example.com   comma-separated stand-ins for the spreadsheet's editors
 //   DEV_EMAIL_QUOTA=1000               emails "Google" allows per run of the server
-//   DEV_CHECKOUT_API_URL=http://localhost:8787  DEV_STRIPE_PK=pk_test_...
-//                                      turn on the embedded donation form (?checkout=embedded)
-//                                      against `npm run worker:dev`. Uses Turnstile's test site key.
+//   DEV_CHECKOUT_API_URL=http://localhost:8787  use `npm run worker:dev` for donation-page data
+//   DEV_STRIPE_PK=pk_test_...          with DEV_CHECKOUT_API_URL, turn on the embedded donation form
+//                                      (?checkout=embedded). Uses Turnstile's test site key.
 //
 // There's no Google sign-in locally: the admin page sends "dev:<email>" as its ID token.
 // Emails aren't sent: they're printed and kept in memory, readable at GET /dev/outbox.
@@ -67,8 +67,9 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/config.js') {
     res.writeHead(200, { 'Content-Type': TYPES['.js'], 'Cache-Control': 'no-store' });
     const cfg = { apiUrl: '/api', devSignIn: true };
+    if (process.env.DEV_CHECKOUT_API_URL) cfg.checkoutApiUrl = process.env.DEV_CHECKOUT_API_URL;
     if (process.env.DEV_CHECKOUT_API_URL && process.env.DEV_STRIPE_PK) {
-      Object.assign(cfg, { checkoutApiUrl: process.env.DEV_CHECKOUT_API_URL, stripePublishableKey: process.env.DEV_STRIPE_PK,
+      Object.assign(cfg, { stripePublishableKey: process.env.DEV_STRIPE_PK,
         turnstileSiteKey: '1x00000000000000000000AA' }); // Cloudflare's always-passes test key
     }
     return res.end('window.READATHON_CONFIG = ' + JSON.stringify(cfg) + ';\n');

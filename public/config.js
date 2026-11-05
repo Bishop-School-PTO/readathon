@@ -1,6 +1,8 @@
 // apiUrl: your Apps Script web app URL (Deploy > Manage deployments > Web app URL).
 // googleClientId: the OAuth client ID for "Sign in with Google" on /admin. It must
 //   match the GOOGLE_CLIENT_ID script property. Client IDs are not secret.
+// checkoutApiUrl: the Cloudflare Worker (worker/). Donation pages load their data through
+//   its cache, falling back to apiUrl. Leave it empty to always use apiUrl.
 // checkoutApiUrl, stripePublishableKey, turnstileSiteKey: the embedded donation form
 //   (donate page with ?checkout=embedded). Leave any of them empty and donate pages
 //   always use the Stripe Payment Link button. None of these are secret.

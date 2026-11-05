@@ -7,21 +7,28 @@
 //   GET  /session-status?session_id=cs_...           -> { status, paymentStatus }
 //        Lets the return page say "thank you" or show the form again.
 //
+//   GET  /donation?c=CODE, POST /donation/refresh
+//        Cached donation-page data (see donation.js).
+//
 // Apps Script's donation sync counts these sessions by their metadata.app tag, so
-// totals work the same as for the Payment Link. This Worker never stores anything.
+// totals work the same as for the Payment Link. Checkout stores nothing; the only thing
+// kept is the donation-page cache in D1, which holds only what donation pages already show.
 //
 // Settings (worker/wrangler.jsonc "vars"): STRIPE_PRICE_ID, SITE_URL, ALLOWED_ORIGINS,
-// TURNSTILE_HOSTNAMES. Secrets (wrangler secret put): STRIPE_SECRET_KEY, TURNSTILE_SECRET_KEY.
+// TURNSTILE_HOSTNAMES, APPS_SCRIPT_URL. Secrets (wrangler secret put): STRIPE_SECRET_KEY,
+// TURNSTILE_SECRET_KEY. D1 binding: DB.
+
+import { CODE_RE, corsHeaders, httpError, json, list } from './shared.js';
+import { getDonation, refreshDonation } from './donation.js';
 
 export const STRIPE_API_VERSION = '2026-09-30.endive';
 export const APP_TAG = 'readathon.bishopschoolpto.com';
-const CODE_RE = /^[A-Z0-9]{4,12}$/; // student donation codes, same check as donation.get
 const SESSION_RE = /^cs_(test_|live_)?[A-Za-z0-9]{10,200}$/;
 const SUBMIT_MESSAGE = 'Thank you for supporting the Bishop PTO and our readers! ' +
   'No goods or services were provided in exchange for this gift.';
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const cors = corsHeaders(request, env);
     if (request.method === 'OPTIONS') return new Response(null, { status: cors ? 204 : 403, headers: cors || {} });
@@ -33,6 +40,16 @@ export default {
       if (url.pathname === '/session-status' && request.method === 'GET') {
         if (!cors) return json({ error: 'Not allowed.' }, 403);
         return json(await sessionStatus(url.searchParams.get('session_id'), env), 200, cors);
+      }
+      if (url.pathname === '/donation' && request.method === 'GET') {
+        if (!cors) return json({ error: 'Not allowed.' }, 403);
+        return json(await getDonation(url.searchParams.get('c'), env, ctx), 200, cors);
+      }
+      if (url.pathname === '/donation/refresh' && request.method === 'POST') {
+        if (!cors) return json({ error: 'Not allowed.' }, 403);
+        const body = await request.json().catch(() => ({}));
+        await refreshDonation(body && body.code, env, ctx);
+        return json({ ok: true }, 202, cors);
       }
       return json({ error: 'Not found.' }, 404, cors || {});
     } catch (err) {
@@ -114,34 +131,4 @@ async function stripe(env, method, path, params) {
     throw new Error('Stripe ' + method + ' ' + path + ': ' + ((out.error && out.error.message) || 'HTTP ' + res.status));
   }
   return out;
-}
-
-/** CORS headers when the request comes from an allowed origin, otherwise null. */
-function corsHeaders(request, env) {
-  const origin = request.headers.get('Origin');
-  if (!origin || !list(env.ALLOWED_ORIGINS).includes(origin)) return null;
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
-  };
-}
-
-function list(s) {
-  return String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
-}
-
-function json(obj, status = 200, headers = {}) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers },
-  });
-}
-
-function httpError(status, message) {
-  const err = new Error(message);
-  err.status = status;
-  return err;
 }

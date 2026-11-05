@@ -4,7 +4,7 @@
   "description": "School-wide readathon: student reading logs, donation pages, and an organizer dashboard backed by Google Sheets.",
   "scripts": {
     "dev": "node dev/server.js",
-    "test": "node --test tests/unit/core.test.js tests/unit/worker.test.mjs",
+    "test": "node --test tests/unit/core.test.js tests/unit/worker.test.mjs tests/unit/donation-cache.test.mjs",
     "test:ui": "playwright test",
     "gas:login": "clasp login --no-localhost",
     "gas:create": "clasp create-script --type standalone --title \"Readathon API\" --rootDir apps-script",

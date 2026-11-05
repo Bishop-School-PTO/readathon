@@ -11,7 +11,7 @@
 
   if (!code) return RA.showError(app, 'This link is missing the reader code.');
 
-  RA.api('donation.get', { code: code }).then(render).catch(function (err) {
+  RA.donationData(code).then(render).catch(function (err) {
     RA.showError(app, err.message);
   });
 

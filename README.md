@@ -181,7 +181,7 @@ The form needs a small server to create each Stripe Checkout Session, and Apps S
 - creates the session for the same "customer chooses what to pay" price as the Payment Link, tagged with the student code and `metadata.app = readathon.bishopschoolpto.com`;
 - tells the page whether a returning donor's payment went through.
 
-It stores nothing. The Apps Script sync counts sessions from the Payment Link and sessions with that tag. To do that, it reads all of the Stripe account's completed Checkout Sessions, so on an account with many other sales it takes longer.
+Checkout stores nothing (the Worker's only storage is the [donation-page cache](#faster-donation-pages-worker-cache)). The Apps Script sync counts sessions from the Payment Link and sessions with that tag. To do that, it reads all of the Stripe account's completed Checkout Sessions, so on an account with many other sales it takes longer.
 
 Set it up:
 
@@ -201,6 +201,22 @@ Set it up:
 Going live means a live price ID in `wrangler.jsonc`, a live restricted key as the Worker's `STRIPE_SECRET_KEY`, and a live publishable key in `config.js`, all at the same time.
 
 **Locally:** copy `worker/.dev.vars.example` to `worker/.dev.vars` and put a sandbox key in it. Run `npm run worker:dev`, then `DEV_CHECKOUT_API_URL=http://localhost:8787 DEV_STRIPE_PK=pk_test_… npm run dev`. The dev server uses Turnstile's always-passes test key. Open a donation page with `?checkout=embedded` and pay with `4242 4242 4242 4242`.
+
+### Faster donation pages (Worker cache)
+
+Loading a donation page straight from Apps Script takes about 3 seconds: ~0.8 s of Apps Script overhead plus several Google Sheets reads. When `checkoutApiUrl` is set in `public/config.js`, donation pages load their data through the same Cloudflare Worker (`GET /donation?c=<code>`), which keeps each code's last answer in a **Cloudflare D1** database (`readathon-donation-cache`, binding `DB`, free plan):
+
+- answers younger than a minute are served as they are;
+- older ones, up to a day old, are served at once and then refreshed from Apps Script in the background;
+- anything older, or a code seen for the first time, waits for Apps Script. If Apps Script fails, the old copy is served instead.
+
+After every save on a student's log page (minutes, books, what to show), the page asks the Worker to refresh that student's copy (`POST /donation/refresh`). That way a hidden reading list disappears for the next visitor. Changes organizers make in `/admin` or straight in the spreadsheet, and newly synced donation totals, show up once the visitor after them has triggered a refresh.
+
+Rows are rewritten only when the answer changed or is over a minute old, well under D1's free daily write allowance. Unknown codes are never stored. The cache holds only what donation pages already show publicly. If the Worker or D1 has a problem, pages load from Apps Script as before. The Worker creates its table on first use, so there's no migration step. `APPS_SCRIPT_URL` in `worker/wrangler.jsonc` must match `apiUrl` in `config.js`; update it along with a new Apps Script deployment URL.
+
+To look at or clear the cache: `npx wrangler d1 execute readathon-donation-cache --remote --config worker/wrangler.jsonc --command "SELECT code, fetched_at FROM donation_cache_v1"` (or `DELETE FROM donation_cache_v1`).
+
+**Locally:** `npm run worker:dev` uses a local D1 and reads from the dev server (`APPS_SCRIPT_URL` in `worker/.dev.vars`; see `.dev.vars.example`). Start the dev server with `DEV_CHECKOUT_API_URL=http://localhost:8787 npm run dev`.
 
 ## Privacy and security
 
@@ -222,10 +238,10 @@ npm run dev        # http://localhost:8082 with a fake roster and demo data
 The console prints the admin URL and some student and donation links. Google sign-in isn't used locally. Instead, the admin page offers an email box, and any address in `DEV_ADMINS` (default `organizer@example.com`) counts as a spreadsheet editor. Data is saved in `dev/data.json`; delete that file to start over. Book search and covers use Open Library directly, so they need internet access.
 
 ```bash
-npm test           # unit tests for apps-script/Core.js
+npm test           # unit tests for apps-script/Core.js and the Worker
 npm run test:ui    # Playwright browser tests (fresh in-memory data, fixed date)
 ```
 
 ## Limits
 
-Apps Script handles a school of several hundred students comfortably. Each request takes ~1–2 s, and Google allows about 30 simultaneous executions per script. Totals are cached for 60 seconds and the roster for 5 minutes, so donation pages and the home page may lag slightly behind.
+Apps Script handles a school of several hundred students comfortably. Each request takes ~1–2 s, and Google allows about 30 simultaneous executions per script. Totals are cached for 60 seconds and the roster for 5 minutes, so donation pages and the home page may lag slightly behind. Donation pages served by the Worker cache can be one refresh behind (see [Faster donation pages](#faster-donation-pages-worker-cache)).
