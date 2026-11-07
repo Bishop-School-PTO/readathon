@@ -174,8 +174,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .tabs button { all: unset; cursor: pointer; padding: .55rem .9rem; font-weight: 800; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -2px; }
 .tabs button[aria-selected=true] { color: var(--navy); border-color: var(--gold); }
 
-/* Donate button on donation pages */
+/* Donate button on donation pages: in the banner, and again after the books */
 .btn-donate { font-size: 1.1rem; padding: .75rem 1.3rem; }
+.hero .btn-donate { position: relative; z-index: 1; margin-top: .5rem; box-shadow: 0 4px 12px rgba(19, 41, 75, .2); }
+@media (max-width: 599px) { .hero .btn-donate { display: block; text-align: center; white-space: normal; } }
+.donate-again { text-align: center; margin: .5rem 0 1.25rem; }
 
 /* Embedded donation form (donate page with ?checkout=embedded) */
 body.has-embedded-checkout main { max-width: 1120px; }
@@ -190,9 +193,14 @@ body.has-embedded-checkout main { max-width: 1120px; }
   .donate-layout.is-embedded > #donate-card { grid-column: 2; grid-row: 1 / -1; }
 }
 @media (max-width: 899px) {
-  /* Phones: the form comes right after the header; the stats follow. */
+  /* Phones: the form comes right after a more compact banner; the stats follow. */
   .donate-layout.is-embedded { display: flex; flex-direction: column; }
   .donate-layout.is-embedded > #donate-card { order: -1; }
+  body.has-embedded-checkout .hero { padding: 1rem 1.15rem; margin-bottom: 1rem; }
+  body.has-embedded-checkout .hero h1 { font-size: 1.45rem; }
+  body.has-embedded-checkout .hero .meta { font-size: .9rem; margin-bottom: .4rem; }
+  body.has-embedded-checkout .hero p:last-of-type { margin-bottom: 0; }
+  body.has-embedded-checkout .hero .paw { width: 110px; bottom: -25px; }
 }
 .donate-layout.is-embedded #donate-card { border-top: 5px solid var(--gold); overflow: hidden; }
 #checkout-retry { margin-bottom: 1rem; }

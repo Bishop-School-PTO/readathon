@@ -35,14 +35,21 @@
       '. Your gift helps our school — and cheers ' + s.firstName + ' on!');
 
     renderStats(data);
-    if (data.donateUrl) {
-      bind('donateText', 'Every gift supports the ' + settings.schoolName + ' PTO. Thank you for cheering on ' + s.firstName + '!');
-      $('#donate-link').href = data.donateUrl;
-      $('#donate-link').textContent = 'Donate in honor of ' + s.firstName;
-      $('#donate-card').hidden = false;
-      if (embedded) setupEmbedded(s, data.donateUrl);
-    }
     if (data.books) renderBooks(data.books);
+    if (data.donateUrl) {
+      if (embedded) {
+        setupEmbedded(s, data.donateUrl);
+      } else {
+        // The call to action sits in the banner; the books section repeats it for donors who scroll.
+        var label = 'Donate in honor of ' + s.firstName;
+        $('#donate-link').href = data.donateUrl;
+        $('#donate-link').textContent = label;
+        $('#donate-link').hidden = false;
+        $('#donate-again-link').href = data.donateUrl;
+        $('#donate-again-link').textContent = label;
+        $('#donate-again').hidden = $('#reading').hidden;
+      }
+    }
   }
 
   // ---- Embedded Stripe Checkout (?checkout=embedded) ----
@@ -59,9 +66,8 @@
 
     document.body.classList.add('has-embedded-checkout');
     $('#layout').classList.add('is-embedded');
-    $('#donate-card h2').textContent = 'Donate in honor of ' + s.firstName;
-    $('#donate-link').hidden = true;
-    $('#embedded-donate').hidden = false;
+    bind('donateHeading', 'Donate in honor of ' + s.firstName);
+    $('#donate-card').hidden = false;
     $('#checkout-fallback-link').href = fallbackUrl;
     var shareUrl = location.origin + '/d/' + encodeURIComponent(studentCode);
     bind('shareUrl', shareUrl);
@@ -173,8 +179,7 @@
     });
 
     function showThanks(paymentStatus) {
-      $('#donate-card h2').textContent = 'Thank you!';
-      $('#donate-card [data-bind="donateText"]').hidden = true;
+      bind('donateHeading', 'Thank you!');
       $('#embedded-donate').hidden = true;
       bind('thanksText', paymentStatus === 'paid'
         ? 'Your gift in honor of ' + s.firstName + ' was received. Thank you for cheering on ' + s.firstName + '!'

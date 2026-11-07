@@ -28,6 +28,8 @@
       <h1>Support <span data-bind="name"></span>'s reading!</h1>
       <p class="meta" data-bind="meta"></p>
       <p data-bind="intro"></p>
+      <!-- The page's call to action (Stripe Payment Link). With ?checkout=embedded, the donate card below replaces it. -->
+      <a class="btn btn-primary btn-donate" id="donate-link" target="_blank" rel="noopener" hidden></a>
     </section>
 
     <!-- One column; with the embedded form on wide screens, the donate card becomes a right-hand column. -->
@@ -39,12 +41,10 @@
       <div class="progress"><span data-bind="goalBar"></span></div>
     </div>
 
+    <!-- Embedded donation form, only with ?checkout=embedded (see js/donate.js). -->
     <section class="card" id="donate-card" hidden>
-      <h2>Make a donation</h2>
-      <p data-bind="donateText"></p>
-      <a class="btn btn-primary btn-donate" id="donate-link" target="_blank" rel="noopener"></a>
-      <!-- Shown instead of the button with ?checkout=embedded (see js/donate.js). -->
-      <div id="embedded-donate" hidden>
+      <h2 data-bind="donateHeading"></h2>
+      <div id="embedded-donate">
         <p class="secure-note">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 1 1 6 0v3H9Z"/></svg>
           Secure payment by Stripe. Card details never touch this site.
@@ -95,6 +95,11 @@
         <ul class="shelf" id="shelf"></ul>
       </div>
     </section>
+
+    <!-- A second, quieter call to action for donors who scroll through the books. -->
+    <p class="donate-again" id="donate-again" hidden>
+      <a class="btn btn-gold" id="donate-again-link" target="_blank" rel="noopener"></a>
+    </p>
     </div>
   </template>
 

@@ -65,6 +65,12 @@ test('student logs minutes, picks a book, and hides things from the donation pag
   await expect(donate.locator('#donate-link')).toHaveText(`Donate in honor of ${s.firstName}`);
   await expect(donate.locator('#donate-link')).toHaveAttribute('href',
     `https://donate.stripe.com/test_00wbJ2ebP3zB8pObgZcjS00?client_reference_id=${s.code}`);
+  await expect(donate.locator('.hero #donate-link')).toBeVisible(); // the call to action is in the banner
+  await expect(donate.locator('#donate-card')).toBeHidden(); // that card is only for the embedded form
+  // ...and again after the bookshelf, for donors who scroll.
+  await expect(donate.locator('#donate-again-link')).toHaveText(`Donate in honor of ${s.firstName}`);
+  await expect(donate.locator('#donate-again-link')).toHaveAttribute('href',
+    `https://donate.stripe.com/test_00wbJ2ebP3zB8pObgZcjS00?client_reference_id=${s.code}`);
 
   // Hide the reading list and minutes, then check the donation page again.
   await page.getByLabel('Show my reading list').uncheck();
@@ -74,6 +80,7 @@ test('student logs minutes, picks a book, and hides things from the donation pag
   await donate.reload();
   await expect(donate.locator('#donate-link')).toBeVisible();
   await expect(donate.locator('#reading')).toBeHidden();
+  await expect(donate.locator('#donate-again')).toBeHidden(); // no books, no second button
   await expect(donate.locator('#goal-card')).toBeHidden();
   await expect(donate.locator('.stat')).toHaveCount(1); // class minutes only
 });
@@ -223,6 +230,7 @@ test('a donation page with no minutes or books yet shows neither section', async
   await expect(page.getByText('minutes read', { exact: true })).toHaveCount(0);
   await expect(page.getByText('books finished')).toHaveCount(0);
   await expect(page.locator('#reading')).toBeHidden();
+  await expect(page.locator('#donate-again')).toBeHidden();
   await expect(page.locator('.stat')).toHaveCount(1); // the class's minutes
 });
 
@@ -359,10 +367,10 @@ test('embedded donation form: only with ?checkout=embedded and a configured Work
   const s = (await students(request))[0];
   let seen = await stubEmbeddedCheckout(page);
 
-  // No URL param: the usual Payment Link button.
+  // No URL param: the usual Payment Link button, in the banner.
   await page.goto('/d/' + s.code);
-  await expect(page.locator('#donate-link')).toBeVisible();
-  await expect(page.locator('#embedded-donate')).toBeHidden();
+  await expect(page.locator('.hero #donate-link')).toBeVisible();
+  await expect(page.locator('#donate-card')).toBeHidden();
 
   // With it: Turnstile, then Stripe's form, created for this student with the Turnstile token.
   await page.goto('/d/' + s.code + '?checkout=embedded');
@@ -385,7 +393,7 @@ test('embedded donation form: only with ?checkout=embedded and a configured Work
   seen = await stubEmbeddedCheckout(page, { configured: false });
   await page.goto('/d/' + s.code + '?checkout=embedded');
   await expect(page.locator('#donate-link')).toBeVisible();
-  await expect(page.locator('#embedded-donate')).toBeHidden();
+  await expect(page.locator('#donate-card')).toBeHidden();
   expect(seen.created).toEqual([]);
 });
 
@@ -428,6 +436,8 @@ test('embedded donation form: two-column layout, loading placeholder, and finish
 
   // Placeholder while Stripe's form loads; the donate card sits to the right of the stats.
   await expect(page.getByRole('heading', { name: `Donate in honor of ${s.firstName}` })).toBeVisible();
+  await expect(page.locator('#donate-link')).toBeHidden(); // the card replaces the banner's button
+  await expect(page.locator('#donate-again')).toBeHidden();
   await expect(page.locator('#checkout-skeleton')).toBeVisible();
   await expect(page.getByText('Loading the secure payment form…')).toBeVisible();
   await expect(page.locator('#checkout-shell')).toHaveAttribute('aria-busy', 'true');
