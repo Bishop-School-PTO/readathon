@@ -53,12 +53,19 @@
   function setupEmbedded(s, fallbackUrl) {
     var workerUrl = String(config.checkoutApiUrl).replace(/\/+$/, '');
     var studentCode = String(s.code || code).toUpperCase();
+    var shell = $('#checkout-shell');
     var widgetId = null;
     var mounting = false;
 
+    document.body.classList.add('has-embedded-checkout');
+    $('#layout').classList.add('is-embedded');
+    $('#donate-card h2').textContent = 'Donate in honor of ' + s.firstName;
     $('#donate-link').hidden = true;
     $('#embedded-donate').hidden = false;
     $('#checkout-fallback-link').href = fallbackUrl;
+    var shareUrl = location.origin + '/d/' + encodeURIComponent(studentCode);
+    bind('shareUrl', shareUrl);
+    $('#share-copy').addEventListener('click', function (e) { RA.copyText(shareUrl, e.currentTarget); });
 
     var stripeReady = loadScript(STRIPE_JS);
     var sessionId = query.get('session_id');
@@ -72,62 +79,135 @@
           appearance: 'interaction-only', // most visitors never see a challenge
           callback: mount,
           'error-callback': function () {
-            fail(new Error('We could not confirm you are a person. Please refresh the page and try again.'));
+            fail(new Error('We could not confirm you are a person. Please try again.'));
             return true;
           },
         });
       });
     }).catch(fail);
 
-    /** Back from Stripe: thank the donor, or show the form again if the payment didn't finish. */
+    /** Back from a bank or wallet page: thank the donor, or show the form again if the payment didn't finish. */
     function checkReturn(id) {
       query.delete('session_id');
       history.replaceState(null, '', location.pathname + '?' + query.toString());
-      return fetch(workerUrl + '/session-status?session_id=' + encodeURIComponent(id))
-        .then(readJson)
+      return fetchStatus(id)
         .then(function (st) {
           if (st.status !== 'complete') {
             message('Your payment didn\'t go through. You can try again below.');
             return false;
           }
-          $('#donate-card h2').textContent = 'Thank you!';
-          bind('donateText', st.paymentStatus === 'paid'
-            ? 'Your gift in honor of ' + s.firstName + ' was received. Thank you for cheering on ' + s.firstName + '!'
-            : 'Your gift in honor of ' + s.firstName + ' is processing. It will count once your bank payment clears.');
+          showThanks(st.paymentStatus);
           return true;
         })
         .catch(function () { return false; }); // can't tell; offer the form again
     }
 
+    function fetchStatus(id) {
+      return fetch(workerUrl + '/session-status?session_id=' + encodeURIComponent(id)).then(readJson);
+    }
+
     function mount(token) {
       if (mounting) return;
       mounting = true;
+      shell.classList.remove('is-failed');
+      $('#checkout-retry').hidden = true;
+      var completedId = '';
+      var checkout = null;
+      var failed = false;
+      function onError(err) {
+        if (failed) return;
+        failed = true;
+        if (checkout) checkout.destroy();
+        mounting = false;
+        fail(err);
+      }
       stripeReady.then(function () {
+        // Resolves right away; Stripe shows its own placeholder until fetchClientSecret answers.
         return window.Stripe(config.stripePublishableKey).createEmbeddedCheckoutPage({
           fetchClientSecret: function () {
             return fetch(workerUrl + '/checkout-session', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ code: studentCode, turnstileToken: token }),
-            }).then(readJson).then(function (out) { return out.clientSecret; });
+            }).then(readJson).then(function (out) {
+              completedId = String(out.clientSecret).split('_secret_')[0]; // the Checkout Session ID
+              window.turnstile.remove(widgetId);
+              widgetId = null;
+              return out.clientSecret;
+            }).catch(function (err) {
+              setTimeout(function () { onError(err); }, 0); // after Stripe has the rejection
+              throw err;
+            });
+          },
+          // Card payments finish here without leaving the page (redirect_on_completion: if_required).
+          onComplete: function () {
+            if (checkout) checkout.destroy();
+            fetchStatus(completedId)
+              .then(function (st) { showThanks(st.paymentStatus); })
+              .catch(function () { showThanks('paid'); }); // Stripe just told us it completed
           },
         });
-      }).then(function (checkout) {
-        window.turnstile.remove(widgetId);
-        $('#turnstile').hidden = true;
+      }).then(function (instance) {
+        if (failed) return instance.destroy();
+        checkout = instance;
         if ($('#checkout-msg').classList.contains('error')) message(''); // an earlier attempt's error
         checkout.mount('#checkout');
-      }).catch(function (err) {
-        mounting = false;
-        fail(err);
-        if (widgetId !== null) window.turnstile.reset(widgetId); // tokens are single-use
-      });
+        return whenFrameLoads($('#checkout')).then(function () {
+          if (failed) return;
+          shell.classList.add('is-ready');
+          shell.setAttribute('aria-busy', 'false');
+          setTimeout(function () { shell.classList.add('is-gone'); }, 300); // after the fade
+        });
+      }).catch(onError);
+    }
+
+    // Turnstile tokens are single-use: a retry asks for a new one, and its callback mounts again.
+    // Not automatic, so a lasting problem doesn't retry forever.
+    $('#checkout-retry').addEventListener('click', function () {
+      $('#checkout-retry').hidden = true;
+      message('');
+      shell.classList.remove('is-failed', 'is-ready', 'is-gone');
+      shell.setAttribute('aria-busy', 'true');
+      if (widgetId !== null) window.turnstile.reset(widgetId);
+      else location.reload();
+    });
+
+    function showThanks(paymentStatus) {
+      $('#donate-card h2').textContent = 'Thank you!';
+      $('#donate-card [data-bind="donateText"]').hidden = true;
+      $('#embedded-donate').hidden = true;
+      bind('thanksText', paymentStatus === 'paid'
+        ? 'Your gift in honor of ' + s.firstName + ' was received. Thank you for cheering on ' + s.firstName + '!'
+        : 'Your gift in honor of ' + s.firstName + ' is processing. It will count once your bank payment clears.');
+      $('#donate-thanks').hidden = false;
+      var card = $('#donate-card');
+      if (card.getBoundingClientRect().top < 0) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function fail(err) {
       message((err && err.message) || 'Something went wrong. Please try again.', true);
+      shell.classList.add('is-failed');
       $('#checkout-fallback').hidden = false;
+      $('#checkout-retry').hidden = false;
     }
+  }
+
+  /**
+   * Stripe.js has no "ready" event for embedded Checkout, so wait for its iframe to load,
+   * plus a moment to paint. Gives up waiting after 8 seconds and shows whatever is there.
+   */
+  function whenFrameLoads(container) {
+    return new Promise(function (resolve) {
+      var done = false;
+      function finish() { if (!done) { done = true; setTimeout(resolve, 200); } }
+      setTimeout(finish, 8000);
+      (function look() {
+        if (done) return;
+        var frame = container.querySelector('iframe');
+        if (frame) frame.addEventListener('load', finish, { once: true });
+        else setTimeout(look, 100);
+      })();
+    });
   }
 
   function message(text, isError) {

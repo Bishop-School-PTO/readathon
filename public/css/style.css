@@ -177,6 +177,66 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 /* Donate button on donation pages */
 .btn-donate { font-size: 1.1rem; padding: .75rem 1.3rem; }
 
+/* Embedded donation form (donate page with ?checkout=embedded) */
+body.has-embedded-checkout main { max-width: 1120px; }
+@media (min-width: 900px) {
+  /* The donate card is a right-hand column next to the student's stats, goal and books.
+     The last row is flexible so a tall payment form doesn't spread out the left column. */
+  .donate-layout.is-embedded {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+    grid-template-rows: auto auto auto 1fr; column-gap: 1.5rem; align-items: start;
+  }
+  .donate-layout.is-embedded > * { grid-column: 1; }
+  .donate-layout.is-embedded > #donate-card { grid-column: 2; grid-row: 1 / -1; }
+}
+@media (max-width: 899px) {
+  /* Phones: the form comes right after the header; the stats follow. */
+  .donate-layout.is-embedded { display: flex; flex-direction: column; }
+  .donate-layout.is-embedded > #donate-card { order: -1; }
+}
+.donate-layout.is-embedded #donate-card { border-top: 5px solid var(--gold); overflow: hidden; }
+#checkout-retry { margin-bottom: 1rem; }
+.secure-note { display: flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .85rem; font-weight: 700; margin: -.25rem 0 1rem; }
+.secure-note svg { color: var(--good); flex: none; }
+#turnstile:not(:empty) { margin-bottom: .75rem; }
+
+/* Stripe's form runs edge to edge across the bottom of the card. */
+.checkout-shell { position: relative; min-height: 600px; margin: 0 -1.25rem -1.25rem; }
+.checkout-shell.is-ready, .checkout-shell.is-failed { min-height: 0; }
+.checkout-shell.is-failed { margin-bottom: 0; }
+.checkout-shell #checkout { opacity: 0; transition: opacity .25s; }
+.checkout-shell.is-ready #checkout { opacity: 1; }
+.checkout-skeleton { position: absolute; inset: 0; padding: 1rem 1.25rem; transition: opacity .25s; }
+.checkout-shell.is-ready .checkout-skeleton { opacity: 0; pointer-events: none; }
+.checkout-shell.is-failed .checkout-skeleton, .checkout-shell.is-gone .checkout-skeleton { display: none; }
+.sk {
+  display: block; border-radius: 8px;
+  /* Neutral greys, like the placeholder Stripe shows next, so the hand-off is seamless. */
+  background: linear-gradient(90deg, #ececec 25%, #f6f6f6 40%, #ececec 60%);
+  background-size: 300% 100%; animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+.sk-label { height: .8rem; width: 38%; margin-bottom: .45rem; }
+.sk-amount { height: 3.2rem; margin-bottom: 1.2rem; }
+.sk-input { height: 2.7rem; margin-bottom: .95rem; }
+.sk-card { height: 5.4rem; }
+.sk-button { height: 3rem; border-radius: 10px; margin-top: .3rem; }
+.sk-wallet { margin: 0 0 1rem; }
+.sk-divider { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.sk-divider::before, .sk-divider::after { content: ""; flex: 1; height: 1px; background: #e6e6e6; }
+.sk-divider .sk-label { width: 4rem; margin: 0; }
+.sk-caption { text-align: center; color: var(--muted); font-size: .85rem; font-weight: 700; margin: 1rem 0 0; }
+.sk-caption .spinner { width: 1rem; height: 1rem; border-width: 2px; margin-right: .3rem; }
+@keyframes sk-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .sk, .sk-caption .spinner { animation: none; } }
+
+.thanks { text-align: center; padding: .5rem 0 .25rem; }
+.thanks-icon {
+  width: 60px; height: 60px; margin: 0 auto .75rem; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: #e2f3e9; color: var(--good);
+}
+.thanks-text { font-size: 1.1rem; font-weight: 700; }
+.thanks .link-box { text-align: left; }
+
 .site-footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 2rem 1rem; }
 
 .spinner { display: inline-block; width: 1.4rem; height: 1.4rem; border: 3px solid var(--line); border-top-color: var(--navy); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; }

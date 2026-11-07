@@ -318,10 +318,24 @@ async function stubEmbeddedCheckout(page, { configured = true, sessionStatus = '
   }));
   await page.route('https://js.stripe.com/**', (route) => route.fulfill({
     contentType: 'text/javascript',
+    // Like the real Stripe.js: resolves at once, asks for the client secret once mounted.
     body: `window.Stripe = function (pk) {
       return { createEmbeddedCheckoutPage: function (opts) {
-        return opts.fetchClientSecret().then(function (secret) {
-          return { mount: function (sel) { document.querySelector(sel).textContent = 'Stripe form for ' + secret + ' with ' + pk; } };
+        window.__completeCheckout = opts.onComplete;
+        var el = null;
+        return Promise.resolve({
+          mount: function (sel) {
+            el = document.querySelector(sel);
+            var frame = document.createElement('iframe');
+            frame.srcdoc = '<p>Stripe placeholder</p>';
+            el.appendChild(frame);
+            opts.fetchClientSecret().then(function (secret) {
+              var p = document.createElement('p');
+              p.textContent = 'Stripe form for ' + secret + ' with ' + pk;
+              el.prepend(p);
+            }, function () { /* Stripe would show an error inside its frame */ });
+          },
+          destroy: function () { if (el) el.innerHTML = ''; window.__destroyed = true; },
         });
       } };
     };`,
@@ -352,7 +366,7 @@ test('embedded donation form: only with ?checkout=embedded and a configured Work
 
   // With it: Turnstile, then Stripe's form, created for this student with the Turnstile token.
   await page.goto('/d/' + s.code + '?checkout=embedded');
-  await expect(page.locator('#checkout')).toHaveText('Stripe form for cs_test_1_secret_x with pk_test_x');
+  await expect(page.locator('#checkout p')).toHaveText('Stripe form for cs_test_1_secret_x with pk_test_x');
   await expect(page.locator('#donate-link')).toBeHidden();
   expect(seen.created).toEqual([{ code: s.code, turnstileToken: 'ts-token' }]);
   expect(await page.evaluate(() => window.__turnstileOpts.action)).toBe('donate');
@@ -380,7 +394,7 @@ test('embedded donation form: unfinished payments and Worker errors offer a way 
   await stubEmbeddedCheckout(page, { sessionStatus: 'open' });
   await page.goto('/donate.html?c=' + s.code + '&checkout=embedded&session_id=cs_test_abc');
   await expect(page.locator('#checkout-msg')).toHaveText(/didn't go through/);
-  await expect(page.locator('#checkout')).toContainText('Stripe form for');
+  await expect(page.locator('#checkout p')).toContainText('Stripe form for');
 
   await page.unrouteAll({ behavior: 'ignoreErrors' });
   await stubOpenLibrary(page);
@@ -388,5 +402,57 @@ test('embedded donation form: unfinished payments and Worker errors offer a way 
   await page.goto('/d/' + s.code + '?checkout=embedded');
   await expect(page.locator('#checkout-msg')).toHaveText('We could not confirm you are a person.');
   await expect(page.locator('#checkout-fallback-link')).toHaveAttribute('href', /donate\.stripe\.com\/.*client_reference_id=/);
+  await expect(page.locator('#checkout-skeleton')).toBeHidden(); // no endless placeholder after an error
+  await expect(page.locator('#checkout iframe')).toHaveCount(0); // Stripe's frame is removed
+  expect(await page.evaluate(() => window.__turnstileResets)).toBeUndefined(); // no automatic retry loop
+  await page.getByRole('button', { name: 'Try again' }).click();
   expect(await page.evaluate(() => window.__turnstileResets)).toBe(1);
+  await expect(page.getByRole('button', { name: 'Try again' })).toBeHidden();
+});
+
+test('embedded donation form: two-column layout, loading placeholder, and finishing on the page', async ({ page, request }) => {
+  const s = (await students(request))[0];
+  const seen = await stubEmbeddedCheckout(page);
+  await page.route(WORKER + '/checkout-session', (route) => {
+    seen.created.push(route.request().postDataJSON());
+    route.fulfill({ json: { clientSecret: 'cs_test_done123456_secret_x' } });
+  });
+  let releaseStripe;
+  const stripeGate = new Promise((r) => { releaseStripe = r; });
+  await page.route('https://js.stripe.com/**', async (route) => {
+    await stripeGate; // hold Stripe.js back so the placeholder can be checked
+    route.fallback();
+  });
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto('/d/' + s.code + '?checkout=embedded', { waitUntil: 'domcontentloaded' }); // Stripe.js is held
+
+  // Placeholder while Stripe's form loads; the donate card sits to the right of the stats.
+  await expect(page.getByRole('heading', { name: `Donate in honor of ${s.firstName}` })).toBeVisible();
+  await expect(page.locator('#checkout-skeleton')).toBeVisible();
+  await expect(page.getByText('Loading the secure payment form…')).toBeVisible();
+  await expect(page.locator('#checkout-shell')).toHaveAttribute('aria-busy', 'true');
+  const card = await page.locator('#donate-card').boundingBox();
+  const stats = await page.locator('#stats').boundingBox();
+  expect(card.x).toBeGreaterThan(stats.x + stats.width);
+  expect(Math.abs(card.y - stats.y)).toBeLessThan(5);
+
+  releaseStripe();
+  await expect(page.locator('#checkout-shell')).toHaveClass(/is-ready/);
+  await expect(page.locator('#checkout-skeleton')).toBeHidden();
+  await expect(page.locator('#checkout-shell')).toHaveAttribute('aria-busy', 'false');
+
+  // Stripe reports the payment finished: thank-you in place, no page reload.
+  await page.evaluate(() => window.__completeCheckout());
+  await expect(page.getByRole('heading', { name: 'Thank you!' })).toBeVisible();
+  await expect(page.locator('#donate-thanks')).toContainText(`in honor of ${s.firstName} was received`);
+  await expect(page.locator('#embedded-donate')).toBeHidden();
+  expect(await page.evaluate(() => window.__destroyed)).toBe(true);
+  expect(seen.statusChecks).toEqual(['cs_test_done123456']);
+  await expect(page.locator('#donate-thanks code')).toHaveText(new URL('/d/' + s.code, page.url()).href);
+
+  // Phones: one column, the donate card first and the stats after it.
+  await page.setViewportSize({ width: 400, height: 800 });
+  const narrowCard = await page.locator('#donate-card').boundingBox();
+  const narrowStats = await page.locator('#stats').boundingBox();
+  expect(narrowStats.y).toBeGreaterThan(narrowCard.y + narrowCard.height);
 });

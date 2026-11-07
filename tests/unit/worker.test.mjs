@@ -67,6 +67,7 @@ test('creates an embedded Checkout Session for the student after Turnstile passe
   assert.equal(p.client_reference_id, 'ABC234');
   assert.equal(p['metadata[app]'], 'readathon.bishopschoolpto.com'); // what the Apps Script sync counts
   assert.equal(p.submit_type, 'donate');
+  assert.equal(p.redirect_on_completion, 'if_required'); // card payments finish without leaving the page
   assert.equal(p.return_url,
     'https://readathon.bishopschoolpto.com/donate.html?c=ABC234&checkout=embedded&session_id={CHECKOUT_SESSION_ID}');
 });

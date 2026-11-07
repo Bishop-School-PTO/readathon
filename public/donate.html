@@ -30,6 +30,8 @@
       <p data-bind="intro"></p>
     </section>
 
+    <!-- One column; with the embedded form on wide screens, the donate card becomes a right-hand column. -->
+    <div class="donate-layout" id="layout">
     <div class="stats" id="stats"></div>
 
     <div class="card" id="goal-card" hidden>
@@ -43,10 +45,43 @@
       <a class="btn btn-primary btn-donate" id="donate-link" target="_blank" rel="noopener"></a>
       <!-- Shown instead of the button with ?checkout=embedded (see js/donate.js). -->
       <div id="embedded-donate" hidden>
+        <p class="secure-note">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 1 1 6 0v3H9Z"/></svg>
+          Secure payment by Stripe. Card details never touch this site.
+        </p>
         <div class="notice" id="checkout-msg" role="status" hidden></div>
+        <button type="button" class="btn btn-primary" id="checkout-retry" hidden>Try again</button>
         <div id="turnstile"></div>
-        <div id="checkout"></div>
-        <p class="muted" id="checkout-fallback" hidden>Having trouble? <a id="checkout-fallback-link" target="_blank" rel="noopener">Donate on Stripe's page instead</a>.</p>
+        <div class="checkout-shell" id="checkout-shell" aria-busy="true">
+          <!-- Placeholder shaped like Stripe's form until it has loaded. -->
+          <div class="checkout-skeleton" id="checkout-skeleton">
+            <div class="sk sk-label"></div>
+            <div class="sk sk-amount"></div>
+            <div class="sk sk-button sk-wallet"></div>
+            <div class="sk-divider"><span class="sk sk-label"></span></div>
+            <div class="sk sk-label"></div>
+            <div class="sk sk-input"></div>
+            <div class="sk sk-label"></div>
+            <div class="sk sk-input sk-card"></div>
+            <div class="sk sk-input"></div>
+            <div class="sk sk-button"></div>
+            <p class="sk-caption" role="status"><span class="spinner"></span> Loading the secure payment form…</p>
+          </div>
+          <div id="checkout"></div>
+        </div>
+        <p class="muted small" id="checkout-fallback" hidden>Having trouble? <a id="checkout-fallback-link" target="_blank" rel="noopener">Donate on Stripe's page instead</a>.</p>
+      </div>
+      <!-- Shown after a donation through the embedded form. -->
+      <div class="thanks" id="donate-thanks" hidden>
+        <div class="thanks-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="30" height="30"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+        </div>
+        <p class="thanks-text" data-bind="thanksText"></p>
+        <p class="muted small">Know someone else who'd like to cheer <span data-bind="firstName"></span> on? Share this page:</p>
+        <div class="link-box">
+          <code data-bind="shareUrl"></code>
+          <button type="button" class="btn btn-gold btn-small" id="share-copy">Copy link</button>
+        </div>
       </div>
     </section>
 
@@ -60,6 +95,7 @@
         <ul class="shelf" id="shelf"></ul>
       </div>
     </section>
+    </div>
   </template>
 
   <footer class="site-footer">Thank you for supporting our readers! 📚</footer>

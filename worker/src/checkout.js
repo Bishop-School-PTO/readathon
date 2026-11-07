@@ -71,7 +71,7 @@ async function createSession(request, env) {
   if (!CODE_RE.test(code)) throw httpError(400, 'This donation link is missing the reader code.');
   const ip = request.headers.get('CF-Connecting-IP') || '';
   if (!(await verifyTurnstile(String((body && body.turnstileToken) || ''), ip, env))) {
-    throw httpError(403, 'We could not confirm you are a person. Please refresh the page and try again.');
+    throw httpError(403, 'We could not confirm you are a person. Please try again.');
   }
   const site = String(env.SITE_URL).replace(/\/+$/, '');
   // Literal braces: Stripe fills in {CHECKOUT_SESSION_ID} when it redirects back.
@@ -87,6 +87,9 @@ async function createSession(request, env) {
     'metadata[app]': APP_TAG,
     'metadata[source]': 'embedded',
     'custom_text[submit][message]': SUBMIT_MESSAGE,
+    // Card payments finish on the donation page (Stripe.js onComplete); only payment
+    // methods that send the donor to their bank come back through return_url.
+    redirect_on_completion: 'if_required',
     return_url: returnUrl,
     integration_identifier: 'readathon_embedded_v1',
   });
