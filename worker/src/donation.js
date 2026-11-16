@@ -20,7 +20,7 @@
 import { CODE_RE, httpError } from './shared.js';
 
 export const FRESH_MS = 60 * 1000;
-export const MAX_STALE_MS = 24 * 60 * 60 * 1000;
+export const MAX_STALE_MS = 30 * 24 * 60 * 60 * 1000; // a quiet page still loads at once
 const APPS_SCRIPT_TIMEOUT_MS = 20000;
 // A cache, so a schema change can just use a new table name.
 const TABLE = 'donation_cache_v1';

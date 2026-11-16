@@ -207,7 +207,7 @@ Going live means a live price ID in `wrangler.jsonc`, a live restricted key as t
 Loading a donation page straight from Apps Script takes about 3 seconds: ~0.8 s of Apps Script overhead plus several Google Sheets reads. When `checkoutApiUrl` is set in `public/config.js`, donation pages load their data through the same Cloudflare Worker (`GET /donation?c=<code>`), which keeps each code's last answer in a **Cloudflare D1** database (`readathon-donation-cache`, binding `DB`, free plan):
 
 - answers younger than a minute are served as they are;
-- older ones, up to a day old, are served at once and then refreshed from Apps Script in the background;
+- older ones, up to 30 days old, are served at once and then refreshed from Apps Script in the background;
 - anything older, or a code seen for the first time, waits for Apps Script. If Apps Script fails, the old copy is served instead.
 
 After every save on a student's log page (minutes, books, what to show), the page asks the Worker to refresh that student's copy (`POST /donation/refresh`). That way a hidden reading list disappears for the next visitor. Changes organizers make in `/admin` or straight in the spreadsheet, and newly synced donation totals, show up once the visitor after them has triggered a refresh.
@@ -244,4 +244,4 @@ npm run test:ui    # Playwright browser tests (fresh in-memory data, fixed date)
 
 ## Limits
 
-Apps Script handles a school of several hundred students comfortably. Each request takes ~1–2 s, and Google allows about 30 simultaneous executions per script. Totals are cached for 60 seconds and the roster for 5 minutes, so donation pages and the home page may lag slightly behind. Donation pages served by the Worker cache can be one refresh behind (see [Faster donation pages](#faster-donation-pages-worker-cache)).
+Apps Script handles a school of several hundred students comfortably. Each request takes ~1–2 s, and Google allows about 30 simultaneous executions per script. Totals are cached for 60 seconds and the roster for 5 minutes, so donation pages and the home page may lag slightly behind. Donation pages served by the Worker cache can be one refresh behind, so the first visitor after a quiet stretch may see numbers up to 30 days old (see [Faster donation pages](#faster-donation-pages-worker-cache)).
