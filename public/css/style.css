@@ -33,7 +33,7 @@ p { margin: 0 0 .75rem; }
   padding: .75rem 1rem;
 }
 .site-header .inner { max-width: 960px; margin: 0 auto; display: flex; align-items: center; gap: .75rem; }
-.site-header img { width: 34px; height: 34px; }
+.site-header img { width: auto; height: 42px; margin: -4px 0; }
 .site-header a { color: #fff; text-decoration: none; font-weight: 800; font-size: 1.1rem; }
 .site-header .spacer { flex: 1; }
 .site-header .tag { font-size: .85rem; opacity: .8; }
@@ -48,8 +48,9 @@ main { max-width: 960px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
   margin-bottom: 1.25rem;
   position: relative;
   overflow: hidden;
+  isolation: isolate; /* keeps .hero-art behind the text but above the background */
 }
-.hero .paw { position: absolute; right: -20px; bottom: -30px; width: 160px; opacity: .25; pointer-events: none; }
+.hero .hero-art { position: absolute; right: 4px; bottom: -48px; width: 110px; opacity: .2; transform: rotate(12deg); z-index: -1; pointer-events: none; }
 .hero .meta { color: var(--muted); font-weight: 700; }
 
 .card {
@@ -200,7 +201,7 @@ body.has-embedded-checkout main { max-width: 1120px; }
   body.has-embedded-checkout .hero h1 { font-size: 1.45rem; }
   body.has-embedded-checkout .hero .meta { font-size: .9rem; margin-bottom: .4rem; }
   body.has-embedded-checkout .hero p:last-of-type { margin-bottom: 0; }
-  body.has-embedded-checkout .hero .paw { width: 110px; bottom: -25px; }
+  body.has-embedded-checkout .hero .hero-art { width: 84px; bottom: -30px; }
 }
 .donate-layout.is-embedded #donate-card { border-top: 5px solid var(--gold); overflow: hidden; }
 #checkout-retry { margin-bottom: 1rem; }

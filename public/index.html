@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Readathon</title>
-  <link rel="icon" type="image/png" href="/img/BishopBookIcon.png">
+  <link rel="icon" type="image/svg+xml" href="/img/favicon.svg">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
   <link rel="stylesheet" href="/css/style.css">
@@ -12,7 +13,7 @@
 <body>
   <header class="site-header">
     <div class="inner">
-      <img src="/img/paw.svg" alt="">
+      <img src="/img/book.svg" alt="">
       <a href="/" id="site-title">Readathon</a>
       <span class="spacer"></span>
       <a href="/admin" class="tag">Organizers</a>
@@ -37,7 +38,7 @@
         var goal = s.schoolGoalMinutes;
         var pct = RA.percent(d.totalMinutes, goal);
         var html =
-          '<section class="hero"><img class="paw" src="/img/paw.svg" alt="">' +
+          '<section class="hero"><img class="hero-art" src="/img/book.svg" alt="">' +
           '<h1>' + RA.esc(s.readathonTitle) + '</h1>' +
           '<p class="meta">' + RA.esc([s.schoolName, dates].filter(Boolean).join(' · ')) + '</p>' +
           '<p>Every minute counts! Students: use the private reading-log link from your teacher to log your minutes and books.</p></section>' +
