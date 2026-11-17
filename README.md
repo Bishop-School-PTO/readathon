@@ -33,7 +33,7 @@ The first tab, or the one named in `ROSTER_SHEET_NAME`, with a header row:
 
 - **Student ID** is required and must be unique and stable. If you don't have school IDs, number the rows 1, 2, 3… and never reuse a number.
 - Common variations are recognized, e.g. `ID`, `Student Name` (as "First Last" or "Last, First"), `Grade Level`, `Homeroom`.
-- "Classmates" means students who share the same Teacher value.
+- "Classmates" means students who share the same Teacher value. Students with no Teacher are grouped by grade; the **Leave groups without a teacher name off the class leaderboards** setting hides those groups from the home page's class lists.
 
 ### Data spreadsheet (the app maintains it)
 

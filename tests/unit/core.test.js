@@ -27,8 +27,8 @@ const TOKENS = {
 };
 const ADMIN = { idToken: 'organizer' };
 
-function setup(today = '2026-10-09') {
-  const store = createFileStore(null, ROSTER, ['organizer@example.com', 'cochair@example.com']);
+function setup(today = '2026-10-09', roster = ROSTER) {
+  const store = createFileStore(null, roster, ['organizer@example.com', 'cochair@example.com']);
   const outbox = [];
   const env = {
     today: () => today,
@@ -536,3 +536,22 @@ test('bulk sends stop at the daily quota and pick up the rest later', () => {
   assert.match(ok('admin.previewEmails', { ...ADMIN, kind: 'weekly' }).skipped, /turned off/);
 });
 
+
+test('organizers can leave groups without a teacher off the class leaderboards', () => {
+  const roster = { ...ROSTER, rows: [...ROSTER.rows, [4, 'Casey', 'Nobody', '5', '']] };
+  const { ok, env, students } = setup('2026-10-09', roster);
+  const casey = students.find((s) => s.studentId === '4');
+  env.sessions = [session('cs_1', casey.code, 1500)];
+  ok('admin.syncDonations', ADMIN);
+
+  let home = ok('home', {});
+  assert.ok(home.classes.some((c) => c.grade === '5' && !c.teacher));
+  assert.ok(home.donations.classes.some((c) => c.grade === '5' && !c.teacher));
+
+  ok('admin.saveSettings', { ...ADMIN, settings: { homeClassesRequireTeacher: true } });
+  home = ok('home', {});
+  assert.deepStrictEqual(home.classes.map((c) => c.teacher).sort(), ['Mr. Chen', 'Ms. Rivera']);
+  assert.deepStrictEqual(home.donations.classes.map((c) => c.teacher).sort(), ['Mr. Chen', 'Ms. Rivera']);
+  assert.ok(home.grades.some((g) => g.grade === '5')); // still counted by grade
+  assert.strictEqual(home.donations.total, 1500); // and school-wide
+});

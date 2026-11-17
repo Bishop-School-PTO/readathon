@@ -53,6 +53,7 @@ var DEFAULT_SETTINGS = {
   editsLocked: false,
   nameFormat: 'firstLastInitial',
   homeShowClassTotals: true,
+  homeClassesRequireTeacher: false,
   defaultShowReadingList: true,
   defaultShowTotalMinutes: true,
   defaultShowClassMinutes: true,
@@ -67,6 +68,7 @@ var SETTING_TYPES = {
   maxMinutesPerDay: 'number',
   editsLocked: 'bool',
   homeShowClassTotals: 'bool',
+  homeClassesRequireTeacher: 'bool',
   defaultShowReadingList: 'bool',
   defaultShowTotalMinutes: 'bool',
   defaultShowClassMinutes: 'bool',
@@ -539,7 +541,9 @@ var ACTIONS = {
       g.raised += agg.raised.byStudent[st.studentId] || 0;
       if (e) { total += e.minutes; readers += 1; g.minutes += e.minutes; g.readers += 1; }
     });
-    var allClasses = Object.keys(agg.byClass).map(function (k) { return agg.byClass[k]; });
+    // Students without a teacher are grouped by grade; organizers can leave those groups off the class lists.
+    var allClasses = Object.keys(agg.byClass).map(function (k) { return agg.byClass[k]; })
+      .filter(function (c) { return !s.homeClassesRequireTeacher || str(c.teacher); });
     var classes = s.homeShowClassTotals ? allClasses.map(withoutRaised)
       .sort(function (a, b) { return b.minutes - a.minutes || compareGrades(a.grade, b.grade); }) : null;
     var gradeList = Object.keys(grades).map(function (k) { return grades[k]; })
