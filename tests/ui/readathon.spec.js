@@ -307,7 +307,7 @@ test('student saves refresh their donation page in the Worker cache', async ({ p
   await expect.poll(() => seen.refreshes).toEqual([s.code, s.code]);
 });
 
-// Embedded donation form (?checkout=embedded), with the Worker, Turnstile and Stripe.js faked.
+// Embedded donation form (the default once configured), with the Worker, Turnstile and Stripe.js faked.
 async function stubEmbeddedCheckout(page, { configured = true, sessionStatus = 'complete', createError = null } = {}) {
   const seen = { created: [], statusChecks: [] };
   await page.route('**/config.js', (route) => route.fulfill({
@@ -363,17 +363,18 @@ async function stubEmbeddedCheckout(page, { configured = true, sessionStatus = '
   return seen;
 }
 
-test('embedded donation form: only with ?checkout=embedded and a configured Worker', async ({ page, request }) => {
+test('embedded donation form: the default with a configured Worker, unless ?checkout=link', async ({ page, request }) => {
   const s = (await students(request))[0];
   let seen = await stubEmbeddedCheckout(page);
 
-  // No URL param: the usual Payment Link button, in the banner.
-  await page.goto('/d/' + s.code);
+  // ?checkout=link: the usual Payment Link button, in the banner.
+  await page.goto('/d/' + s.code + '?checkout=link');
   await expect(page.locator('.hero #donate-link')).toBeVisible();
   await expect(page.locator('#donate-card')).toBeHidden();
+  expect(seen.created).toEqual([]);
 
-  // With it: Turnstile, then Stripe's form, created for this student with the Turnstile token.
-  await page.goto('/d/' + s.code + '?checkout=embedded');
+  // By default: Turnstile, then Stripe's form, created for this student with the Turnstile token.
+  await page.goto('/d/' + s.code);
   await expect(page.locator('#checkout p')).toHaveText('Stripe form for cs_test_1_secret_x with pk_test_x');
   await expect(page.locator('#donate-link')).toBeHidden();
   expect(seen.created).toEqual([{ code: s.code, turnstileToken: 'ts-token' }]);
@@ -387,11 +388,11 @@ test('embedded donation form: only with ?checkout=embedded and a configured Work
   expect(seen.statusChecks).toEqual(['cs_test_abc']);
   expect(new URL(page.url()).searchParams.get('session_id')).toBeNull();
 
-  // Not configured: the URL param is ignored.
+  // Not configured: the Payment Link button.
   await page.unrouteAll({ behavior: 'ignoreErrors' });
   await stubOpenLibrary(page);
   seen = await stubEmbeddedCheckout(page, { configured: false });
-  await page.goto('/d/' + s.code + '?checkout=embedded');
+  await page.goto('/d/' + s.code);
   await expect(page.locator('#donate-link')).toBeVisible();
   await expect(page.locator('#donate-card')).toBeHidden();
   expect(seen.created).toEqual([]);
@@ -407,7 +408,7 @@ test('embedded donation form: unfinished payments and Worker errors offer a way 
   await page.unrouteAll({ behavior: 'ignoreErrors' });
   await stubOpenLibrary(page);
   await stubEmbeddedCheckout(page, { createError: 'We could not confirm you are a person.' });
-  await page.goto('/d/' + s.code + '?checkout=embedded');
+  await page.goto('/d/' + s.code);
   await expect(page.locator('#checkout-msg')).toHaveText('We could not confirm you are a person.');
   await expect(page.locator('#checkout-fallback-link')).toHaveAttribute('href', /donate\.stripe\.com\/.*client_reference_id=/);
   await expect(page.locator('#checkout-skeleton')).toBeHidden(); // no endless placeholder after an error
@@ -432,7 +433,7 @@ test('embedded donation form: two-column layout, loading placeholder, and finish
     route.fallback();
   });
   await page.setViewportSize({ width: 1200, height: 900 });
-  await page.goto('/d/' + s.code + '?checkout=embedded', { waitUntil: 'domcontentloaded' }); // Stripe.js is held
+  await page.goto('/d/' + s.code, { waitUntil: 'domcontentloaded' }); // Stripe.js is held
 
   // Placeholder while Stripe's form loads; the donate card sits to the right of the stats.
   await expect(page.getByRole('heading', { name: `Donate in honor of ${s.firstName}` })).toBeVisible();
@@ -465,4 +466,37 @@ test('embedded donation form: two-column layout, loading placeholder, and finish
   const narrowCard = await page.locator('#donate-card').boundingBox();
   const narrowStats = await page.locator('#stats').boundingBox();
   expect(narrowStats.y).toBeGreaterThan(narrowCard.y + narrowCard.height);
+});
+
+test('embedded donation form: starts before the reader\'s data arrives, and is dropped for a bad link', async ({ page, request }) => {
+  const s = (await students(request))[0];
+  const seen = await stubEmbeddedCheckout(page);
+  let releaseData;
+  const dataGate = new Promise((r) => { releaseData = r; });
+  await page.route(WORKER + '/donation?**', async (route) => {
+    await dataGate; // hold the reader's data back
+    route.fallback();
+  });
+  await page.goto('/d/' + s.code, { waitUntil: 'domcontentloaded' });
+
+  // The page is laid out with placeholders, and Stripe's form loads without waiting.
+  await expect(page.locator('.hero-pending')).toBeVisible();
+  await expect(page.locator('.stat-pending')).toHaveCount(3);
+  await expect(page.locator('#checkout p')).toHaveText('Stripe form for cs_test_1_secret_x with pk_test_x');
+  expect(seen.created).toEqual([{ code: s.code, turnstileToken: 'ts-token' }]);
+  await expect(page.getByRole('heading', { name: 'Donate', exact: true })).toBeVisible();
+
+  // The data fills the page in.
+  releaseData();
+  await expect(page.getByRole('heading', { name: `Support ${s.firstName} ${s.lastName[0]}.'s reading!` })).toBeVisible();
+  await expect(page.getByRole('heading', { name: `Donate in honor of ${s.firstName}` })).toBeVisible();
+  await expect(page.locator('.hero-pending')).toBeHidden();
+  await expect(page.locator('.stat-pending')).toHaveCount(0);
+  await expect(page.locator('#checkout-fallback-link')).toHaveAttribute('href', /donate\.stripe\.com\/.*client_reference_id=/);
+
+  // An unknown code: the usual error, and the form is taken down.
+  await page.goto('/d/NOPE99');
+  await expect(page.getByRole('alert')).toContainText('could not find');
+  await expect(page.locator('#donate-card')).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.classList.contains('has-embedded-checkout'))).toBe(false);
 });

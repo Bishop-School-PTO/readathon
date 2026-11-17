@@ -173,7 +173,7 @@ Locally, the dev server fakes Stripe with a few demo donations.
 
 ### Embedded donation form (optional)
 
-Adding `?checkout=embedded` to a donation link (`/d/<code>?checkout=embedded`) shows Stripe's payment form on the donation page instead of the **Donate** button. Without the parameter, or until everything below is set up, donation pages keep using the Payment Link. Both count toward the same totals.
+Once everything below is set up, donation pages show Stripe's payment form on the page instead of the **Donate** button. Until then, or with `?checkout=link` on a donation link (`/d/<code>?checkout=link`), donation pages use the Payment Link. Both count toward the same totals.
 
 The form needs a small server to create each Stripe Checkout Session, and Apps Script can't do that from a static page. So it runs as a **Cloudflare Worker** (`worker/`, free plan). The Worker:
 
@@ -200,7 +200,7 @@ Set it up:
 
 Going live means a live price ID in `wrangler.jsonc`, a live restricted key as the Worker's `STRIPE_SECRET_KEY`, and a live publishable key in `config.js`, all at the same time.
 
-**Locally:** copy `worker/.dev.vars.example` to `worker/.dev.vars` and put a sandbox key in it. Run `npm run worker:dev`, then `DEV_CHECKOUT_API_URL=http://localhost:8787 DEV_STRIPE_PK=pk_test_… npm run dev`. The dev server uses Turnstile's always-passes test key. Open a donation page with `?checkout=embedded` and pay with `4242 4242 4242 4242`.
+**Locally:** copy `worker/.dev.vars.example` to `worker/.dev.vars` and put a sandbox key in it. Run `npm run worker:dev`, then `DEV_CHECKOUT_API_URL=http://localhost:8787 DEV_STRIPE_PK=pk_test_… npm run dev`. The dev server uses Turnstile's always-passes test key. Open a donation page and pay with `4242 4242 4242 4242`.
 
 ### Faster donation pages (Worker cache)
 

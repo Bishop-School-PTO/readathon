@@ -26,10 +26,14 @@
   <template id="page">
     <section class="hero">
       <img class="hero-art" src="/img/book.svg" alt="">
+      <!-- Shown while the reader's data loads (embedded form only: the page is laid out before it arrives). -->
+      <div class="hero-pending" aria-hidden="true">
+        <span class="sk sk-title"></span><span class="sk sk-text"></span><span class="sk sk-text sk-short"></span>
+      </div>
       <h1>Support <span data-bind="name"></span>'s reading!</h1>
       <p class="meta" data-bind="meta"></p>
       <p data-bind="intro"></p>
-      <!-- The page's call to action (Stripe Payment Link). With ?checkout=embedded, the donate card below replaces it. -->
+      <!-- The page's call to action (Stripe Payment Link). When the embedded form is configured (and not ?checkout=link), the donate card below replaces it. -->
       <a class="btn btn-primary btn-donate" id="donate-link" target="_blank" rel="noopener" hidden></a>
     </section>
 
@@ -42,7 +46,7 @@
       <div class="progress"><span data-bind="goalBar"></span></div>
     </div>
 
-    <!-- Embedded donation form, only with ?checkout=embedded (see js/donate.js). -->
+    <!-- Embedded donation form, the default once configured; ?checkout=link turns it off (see js/donate.js). -->
     <section class="card" id="donate-card" hidden>
       <h2 data-bind="donateHeading"></h2>
       <div id="embedded-donate">

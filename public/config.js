@@ -4,8 +4,8 @@
 // checkoutApiUrl: the Cloudflare Worker (worker/). Donation pages load their data through
 //   its cache, falling back to apiUrl. Leave it empty to always use apiUrl.
 // checkoutApiUrl, stripePublishableKey, turnstileSiteKey: the embedded donation form
-//   (donate page with ?checkout=embedded). Leave any of them empty and donate pages
-//   always use the Stripe Payment Link button. None of these are secret.
+//   (the default on donate pages; ?checkout=link opts out). Leave any of them empty and
+//   donate pages always use the Stripe Payment Link button. None of these are secret.
 // The local dev server (npm run dev) serves its own version of this file.
 window.READATHON_CONFIG = {
   apiUrl: 'https://script.google.com/macros/s/AKfycbyTY8HNY1eMpmVgUvF_mlPWiEajmafQjBeOSEwoG-B0hAzCZblGSW13awHJVeNQkCFd8A/exec',

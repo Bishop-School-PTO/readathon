@@ -1,4 +1,4 @@
-// Cloudflare Worker for the embedded donation form (donate page with ?checkout=embedded).
+// Cloudflare Worker for the embedded donation form (shown on donate pages by default).
 //
 //   POST /checkout-session  { code, turnstileToken }  -> { clientSecret }
 //        Checks the Turnstile token, then creates an embedded Checkout Session for the

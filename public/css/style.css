@@ -181,7 +181,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 599px) { .hero .btn-donate { display: block; text-align: center; white-space: normal; } }
 .donate-again { text-align: center; margin: .5rem 0 1.25rem; }
 
-/* Embedded donation form (donate page with ?checkout=embedded) */
+/* Embedded donation form (the donate page's default once configured) */
 body.has-embedded-checkout main { max-width: 1120px; }
 @media (min-width: 900px) {
   /* The donate card is a right-hand column next to the student's stats, goal and books.
@@ -235,6 +235,15 @@ body.has-embedded-checkout main { max-width: 1120px; }
 .sk-divider .sk-label { width: 4rem; margin: 0; }
 .sk-caption { text-align: center; color: var(--muted); font-size: .85rem; font-weight: 700; margin: 1rem 0 0; }
 .sk-caption .spinner { width: 1rem; height: 1rem; border-width: 2px; margin-right: .3rem; }
+/* The page is laid out before the reader's data arrives; these hold its place. */
+.hero-pending { display: none; }
+#app.is-pending .hero-pending { display: block; }
+#app.is-pending .hero > :not(.hero-art):not(.hero-pending) { display: none; }
+.hero-pending .sk-title { height: 2rem; width: 70%; margin-bottom: .9rem; }
+.hero-pending .sk-text { height: .95rem; width: 90%; margin-bottom: .6rem; }
+.hero-pending .sk-short { width: 55%; margin-bottom: 0; }
+.stat-pending .sk-value { height: 1.9rem; width: 45%; margin-bottom: .4rem; }
+.stat-pending .sk-label { width: 75%; margin: 0; }
 @keyframes sk-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 @media (prefers-reduced-motion: reduce) { .sk, .sk-caption .spinner { animation: none; } }
 

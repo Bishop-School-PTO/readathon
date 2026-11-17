@@ -4,14 +4,31 @@
   var code = RA.routeParam('d', 'c');
   var config = window.READATHON_CONFIG || {};
   var query = new URLSearchParams(location.search);
-  // ?checkout=embedded shows Stripe's payment form on this page instead of linking out,
-  // once the Cloudflare Worker, Stripe publishable key and Turnstile site key are configured.
-  var embedded = query.get('checkout') === 'embedded' &&
+  // Stripe's payment form shows on this page by default, once the Cloudflare Worker, Stripe
+  // publishable key and Turnstile site key are configured. ?checkout=link uses the Payment Link instead.
+  var embedded = query.get('checkout') !== 'link' &&
     !!(config.checkoutApiUrl && config.stripePublishableKey && config.turnstileSiteKey);
+  // Declared up here: the embedded form starts loading before the rest of this file has run.
+  var STRIPE_JS = 'https://js.stripe.com/endive/stripe.js';
+  var TURNSTILE_JS = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+  var scripts = {}; // loadScript's downloads, by URL
 
   if (!code) return RA.showError(app, 'This link is missing the reader code.');
 
+  // With the embedded form, lay out the page and start loading the payment form right away.
+  // The reader's name, stats and books fill in when their data arrives.
+  var checkout = null;
+  if (embedded) {
+    showPage();
+    app.classList.add('is-pending');
+    $('#stats').innerHTML = new Array(4).join('<div class="stat stat-pending" aria-hidden="true">' +
+      '<span class="sk sk-value"></span><span class="sk sk-label"></span></div>');
+    checkout = setupEmbedded();
+  }
+
   RA.donationData(code).then(render).catch(function (err) {
+    if (checkout) checkout.cancel();
+    app.classList.remove('is-pending');
     RA.showError(app, err.message);
   });
 
@@ -20,13 +37,18 @@
     app.querySelectorAll('[data-bind="' + name + '"]').forEach(function (el) { el.textContent = value; });
   }
 
+  function showPage() {
+    app.innerHTML = '';
+    app.appendChild(document.getElementById('page').content.cloneNode(true));
+  }
+
   function render(data) {
     var s = data.student;
     var settings = data.settings;
     document.title = 'Support ' + s.name + ' · ' + settings.readathonTitle;
     document.getElementById('site-title').textContent = settings.readathonTitle;
-    app.innerHTML = '';
-    app.appendChild(document.getElementById('page').content.cloneNode(true));
+    if (!checkout) showPage();
+    app.classList.remove('is-pending');
 
     bind('name', s.name);
     bind('firstName', s.firstName);
@@ -36,39 +58,45 @@
 
     renderStats(data);
     if (data.books) renderBooks(data.books);
-    if (data.donateUrl) {
-      if (embedded) {
-        setupEmbedded(s, data.donateUrl);
-      } else {
-        // The call to action sits in the banner; the books section repeats it for donors who scroll.
-        var label = 'Donate in honor of ' + s.firstName;
-        $('#donate-link').href = data.donateUrl;
-        $('#donate-link').textContent = label;
-        $('#donate-link').hidden = false;
-        $('#donate-again-link').href = data.donateUrl;
-        $('#donate-again-link').textContent = label;
-        $('#donate-again').hidden = $('#reading').hidden;
-      }
+    if (!data.donateUrl) {
+      if (checkout) checkout.cancel(); // donations aren't set up: no form, like no button
+    } else if (checkout) {
+      checkout.setStudent(s, data.donateUrl);
+    } else {
+      // The call to action sits in the banner; the books section repeats it for donors who scroll.
+      var label = 'Donate in honor of ' + s.firstName;
+      $('#donate-link').href = data.donateUrl;
+      $('#donate-link').textContent = label;
+      $('#donate-link').hidden = false;
+      $('#donate-again-link').href = data.donateUrl;
+      $('#donate-again-link').textContent = label;
+      $('#donate-again').hidden = $('#reading').hidden;
     }
   }
 
-  // ---- Embedded Stripe Checkout (?checkout=embedded) ----
+  // ---- Embedded Stripe Checkout (the default; not with ?checkout=link) ----
 
-  var STRIPE_JS = 'https://js.stripe.com/endive/stripe.js';
-  var TURNSTILE_JS = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-
-  function setupEmbedded(s, fallbackUrl) {
+  /**
+   * Starts the payment form before the reader's data has loaded: it only needs the code from the URL.
+   * Returns setStudent(student, paymentLinkUrl) for when the data arrives, and cancel() for when
+   * the page can't take donations after all (unknown code, donations not set up).
+   */
+  function setupEmbedded() {
     var workerUrl = String(config.checkoutApiUrl).replace(/\/+$/, '');
-    var studentCode = String(s.code || code).toUpperCase();
+    var studentCode = String(code).toUpperCase();
     var shell = $('#checkout-shell');
     var widgetId = null;
     var mounting = false;
+    var cancelled = false;
+    var instance = null; // Stripe's embedded Checkout, once created
+    var fallbackUrl = '';
+    var gotStudent;
+    var studentReady = new Promise(function (resolve) { gotStudent = resolve; });
 
     document.body.classList.add('has-embedded-checkout');
     $('#layout').classList.add('is-embedded');
-    bind('donateHeading', 'Donate in honor of ' + s.firstName);
+    bind('donateHeading', 'Donate');
     $('#donate-card').hidden = false;
-    $('#checkout-fallback-link').href = fallbackUrl;
     var shareUrl = location.origin + '/d/' + encodeURIComponent(studentCode);
     bind('shareUrl', shareUrl);
     $('#share-copy').addEventListener('click', function (e) { RA.copyText(shareUrl, e.currentTarget); });
@@ -77,8 +105,9 @@
     var sessionId = query.get('session_id');
     var check = sessionId ? checkReturn(sessionId) : Promise.resolve(false);
     check.then(function (done) {
-      if (done) return;
+      if (done || cancelled) return;
       return loadScript(TURNSTILE_JS).then(function () {
+        if (cancelled) return;
         widgetId = window.turnstile.render($('#turnstile'), {
           sitekey: config.turnstileSiteKey,
           action: 'donate',
@@ -92,7 +121,7 @@
       });
     }).catch(fail);
 
-    /** Back from a bank or wallet page: thank the donor, or show the form again if the payment didn't finish. */
+  /** Back from a bank or wallet page: thank the donor, or show the form again if the payment didn't finish. */
     function checkReturn(id) {
       query.delete('session_id');
       history.replaceState(null, '', location.pathname + '?' + query.toString());
@@ -113,17 +142,17 @@
     }
 
     function mount(token) {
-      if (mounting) return;
+      if (mounting || cancelled) return;
       mounting = true;
       shell.classList.remove('is-failed');
       $('#checkout-retry').hidden = true;
       var completedId = '';
-      var checkout = null;
       var failed = false;
       function onError(err) {
         if (failed) return;
         failed = true;
-        if (checkout) checkout.destroy();
+        if (instance) instance.destroy();
+        instance = null;
         mounting = false;
         fail(err);
       }
@@ -147,19 +176,20 @@
           },
           // Card payments finish here without leaving the page (redirect_on_completion: if_required).
           onComplete: function () {
-            if (checkout) checkout.destroy();
+            if (instance) instance.destroy();
+            instance = null;
             fetchStatus(completedId)
               .then(function (st) { showThanks(st.paymentStatus); })
               .catch(function () { showThanks('paid'); }); // Stripe just told us it completed
           },
         });
-      }).then(function (instance) {
-        if (failed) return instance.destroy();
-        checkout = instance;
+      }).then(function (created) {
+        if (failed || cancelled) return created.destroy();
+        instance = created;
         if ($('#checkout-msg').classList.contains('error')) message(''); // an earlier attempt's error
-        checkout.mount('#checkout');
+        instance.mount('#checkout');
         return whenFrameLoads($('#checkout')).then(function () {
-          if (failed) return;
+          if (failed || cancelled) return;
           shell.classList.add('is-ready');
           shell.setAttribute('aria-busy', 'false');
           setTimeout(function () { shell.classList.add('is-gone'); }, 300); // after the fade
@@ -178,23 +208,48 @@
       else location.reload();
     });
 
+    // The thank-you names the reader, so it waits for their data (a return check can finish first).
     function showThanks(paymentStatus) {
-      bind('donateHeading', 'Thank you!');
-      $('#embedded-donate').hidden = true;
-      bind('thanksText', paymentStatus === 'paid'
-        ? 'Your gift in honor of ' + s.firstName + ' was received. Thank you for cheering on ' + s.firstName + '!'
-        : 'Your gift in honor of ' + s.firstName + ' is processing. It will count once your bank payment clears.');
-      $('#donate-thanks').hidden = false;
-      var card = $('#donate-card');
-      if (card.getBoundingClientRect().top < 0) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      studentReady.then(function (s) {
+        if (cancelled) return;
+        bind('donateHeading', 'Thank you!');
+        $('#embedded-donate').hidden = true;
+        bind('thanksText', paymentStatus === 'paid'
+          ? 'Your gift in honor of ' + s.firstName + ' was received. Thank you for cheering on ' + s.firstName + '!'
+          : 'Your gift in honor of ' + s.firstName + ' is processing. It will count once your bank payment clears.');
+        $('#donate-thanks').hidden = false;
+        var card = $('#donate-card');
+        if (card.getBoundingClientRect().top < 0) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     }
 
     function fail(err) {
+      if (cancelled) return;
       message((err && err.message) || 'Something went wrong. Please try again.', true);
       shell.classList.add('is-failed');
-      $('#checkout-fallback').hidden = false;
+      $('#checkout-fallback').hidden = !fallbackUrl; // shown once the Payment Link is known
       $('#checkout-retry').hidden = false;
     }
+
+    return {
+      setStudent: function (s, paymentLinkUrl) {
+        fallbackUrl = paymentLinkUrl;
+        $('#checkout-fallback-link').href = paymentLinkUrl;
+        if (shell.classList.contains('is-failed')) $('#checkout-fallback').hidden = false;
+        if ($('#donate-thanks').hidden) bind('donateHeading', 'Donate in honor of ' + s.firstName);
+        gotStudent(s);
+      },
+      cancel: function () {
+        cancelled = true;
+        if (instance) instance.destroy();
+        instance = null;
+        if (widgetId !== null && window.turnstile) window.turnstile.remove(widgetId);
+        widgetId = null;
+        document.body.classList.remove('has-embedded-checkout');
+        if ($('#layout')) $('#layout').classList.remove('is-embedded');
+        if ($('#donate-card')) $('#donate-card').hidden = true;
+      },
+    };
   }
 
   /**
@@ -229,7 +284,6 @@
     });
   }
 
-  var scripts = {};
   function loadScript(src) {
     if (!scripts[src]) {
       scripts[src] = new Promise(function (resolve, reject) {

@@ -4,7 +4,7 @@
 //   DEV_EMAIL_QUOTA=1000               emails "Google" allows per run of the server
 //   DEV_CHECKOUT_API_URL=http://localhost:8787  use `npm run worker:dev` for donation-page data
 //   DEV_STRIPE_PK=pk_test_...          with DEV_CHECKOUT_API_URL, turn on the embedded donation form
-//                                      (?checkout=embedded). Uses Turnstile's test site key.
+//                                      (the default; ?checkout=link opts out). Uses Turnstile's test site key.
 //
 // There's no Google sign-in locally: the admin page sends "dev:<email>" as its ID token.
 // Emails aren't sent: they're printed and kept in memory, readable at GET /dev/outbox.
