@@ -57,6 +57,7 @@
   function renderTotals() {
     bind('totalMinutes', RA.fmt(state.totalMinutes));
     bind('daysRead', RA.fmt(state.daysRead));
+    $('#class-stat').hidden = !state.classMinutes; // nothing to cheer on until the class has read
     bind('classMinutes', RA.fmt(state.classMinutes));
     bind('booksFinished', RA.fmt(state.books.filter(function (b) { return b.status === 'finished'; }).length));
     $('#raised-stat').hidden = !state.donationTotalsEnabled;

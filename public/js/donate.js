@@ -306,7 +306,7 @@
       tiles.push([RA.fmt(data.daysRead), 'days of reading']);
     }
     if (data.books) tiles.push([RA.fmt(data.books.filter(function (b) { return b.status === 'finished'; }).length), 'books finished']);
-    if (data.classMinutes !== undefined) tiles.push([RA.fmt(data.classMinutes), 'minutes read by ' + (data.student.teacher ? data.student.teacher + "'s class" : 'the class')]);
+    if (data.classMinutes) tiles.push([RA.fmt(data.classMinutes), 'minutes read by ' + (data.student.teacher ? data.student.teacher + "'s class" : 'the class')]);
     var stats = $('#stats');
     stats.hidden = !tiles.length;
     stats.innerHTML = tiles.map(function (t) {

@@ -85,6 +85,40 @@ test('student logs minutes, picks a book, and hides things from the donation pag
   await expect(donate.locator('.stat')).toHaveCount(1); // class minutes only
 });
 
+test('the student page hides the class minutes until the class has read', async ({ page, request }) => {
+  const s = (await students(request))[0];
+  await page.goto('/s/' + s.token);
+  await expect(page.locator('#class-stat')).toBeVisible(); // the dev seed gives every class some minutes
+
+  // A class with no minutes yet (faked: every seeded class has some).
+  await page.route('**/api', async (route) => {
+    const res = await route.fetch();
+    const out = await res.json();
+    if (route.request().postDataJSON().action === 'student.get') out.data.classMinutes = 0;
+    return route.fulfill({ response: res, json: out });
+  });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: `Hi, ${s.firstName}!` })).toBeVisible();
+  await expect(page.locator('#class-stat')).toBeHidden();
+});
+
+test('the donation page hides the class minutes until the class has read', async ({ page, request }) => {
+  const s = (await students(request))[0];
+  await page.goto('/d/' + s.code);
+  await expect(page.locator('.stat .label', { hasText: 'minutes read by' })).toHaveCount(1);
+
+  await page.route('**/api', async (route) => {
+    const res = await route.fetch();
+    const out = await res.json();
+    if (route.request().postDataJSON().action === 'donation.get') out.data.classMinutes = 0;
+    return route.fulfill({ response: res, json: out });
+  });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: `Support ${s.firstName} ${s.lastName[0]}.'s reading!` })).toBeVisible();
+  await expect(page.locator('.stat .label', { hasText: 'minutes read by' })).toHaveCount(0);
+  await expect(page.locator('.stat .label', { hasText: 'minutes read' })).not.toHaveCount(0); // the rest still show
+});
+
 test('bad links show a friendly error', async ({ page }) => {
   await page.goto('/s/notARealTokenAtAll1234');
   await expect(page.getByRole('alert')).toContainText('could not find');
