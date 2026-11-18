@@ -70,6 +70,19 @@
     return parseDate(d).toLocaleDateString('en-US', opts || { weekday: 'short', month: 'short', day: 'numeric' });
   }
 
+  /** Orders grades PK, TK, K, 1, 2, … (same as compareGrades in apps-script/Core.js). */
+  function compareGrades(a, b) {
+    var rank = function (g) {
+      var s = String(g || '').toUpperCase();
+      if (s === 'PK' || s === 'PRE-K' || s === 'PREK') return -2;
+      if (s === 'TK') return -1;
+      if (s === 'K' || s === 'KINDER' || s === 'KINDERGARTEN') return 0;
+      var n = parseInt(s.replace(/[^0-9]/g, ''), 10);
+      return isNaN(n) ? 100 : n;
+    };
+    return rank(a) - rank(b) || String(a || '').localeCompare(String(b || ''));
+  }
+
   function gradeLabel(g) {
     if (!g) return '';
     var s = String(g);
@@ -182,7 +195,7 @@
 
   window.RA = {
     api: api, routeParam: routeParam, esc: esc, fmt: fmt, money: money, prettyMinutes: prettyMinutes,
-    formatDate: formatDate, gradeLabel: gradeLabel, percent: percent, findCoverUrl: findCoverUrl,
+    formatDate: formatDate, compareGrades: compareGrades, gradeLabel: gradeLabel, percent: percent, findCoverUrl: findCoverUrl,
     coverEl: coverEl, copyText: copyText, showError: showError,
     donationData: donationData, refreshDonationPage: refreshDonationPage,
   };

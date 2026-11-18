@@ -119,6 +119,46 @@ test('the donation page hides the class minutes until the class has read', async
   await expect(page.locator('.stat .label', { hasText: 'minutes read' })).not.toHaveCount(0); // the rest still show
 });
 
+test('organizer sorts students by grade and teacher, and the slips print in that order', async ({ page }) => {
+  await page.addInitScript(() => { window.print = () => { window.__printed = (window.__printed || 0) + 1; }; });
+  await page.goto('/admin');
+  await page.getByLabel('Email', { exact: true }).fill('organizer@example.com');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('tab', { name: 'Students & links' }).click();
+  await expect(page.locator('#student-rows tr').first()).toBeVisible();
+
+  const rows = () => page.locator('#student-rows tr').evaluateAll((trs) =>
+    trs.map((tr) => ({ name: tr.children[0].textContent, grade: tr.children[1].textContent, teacher: tr.children[2].textContent })));
+  const rank = (g) => (g === 'K' ? 0 : Number(g));
+
+  await page.getByLabel('Sort students').selectOption({ label: 'Sort by teacher' });
+  let list = await rows();
+  for (let i = 1; i < list.length; i++) expect(list[i - 1].teacher.localeCompare(list[i].teacher)).toBeLessThanOrEqual(0);
+
+  await page.getByLabel('Sort students').selectOption({ label: 'Sort by grade, then teacher' });
+  list = await rows();
+  for (let i = 1; i < list.length; i++) {
+    const a = list[i - 1], b = list[i];
+    expect(rank(a.grade) < rank(b.grade) || (a.grade === b.grade && a.teacher.localeCompare(b.teacher) <= 0)).toBe(true);
+  }
+  expect(list[0].grade).toBe('K');
+  // Grade 3 has two classes: Mr. Chen's comes before Ms. Tanaka's.
+  const third = list.filter((r) => r.grade === '3').map((r) => r.teacher);
+  expect(third.indexOf('Ms. Tanaka')).toBeGreaterThan(third.lastIndexOf('Mr. Chen'));
+  // The class menu is in grade order too.
+  await expect(page.locator('#student-class option').nth(1)).toHaveText('K · Ms. Rivera');
+
+  // The slips follow the table's order.
+  await page.getByRole('button', { name: 'Print link slips' }).click();
+  expect(await page.evaluate(() => window.__printed)).toBe(1);
+  expect(await page.locator('.slip .slip-name').allTextContents()).toEqual(list.map((r) => r.name));
+
+  // The choice is remembered.
+  await page.reload();
+  await page.getByRole('tab', { name: 'Students & links' }).click();
+  await expect(page.getByLabel('Sort students')).toHaveValue('class');
+});
+
 test('bad links show a friendly error', async ({ page }) => {
   await page.goto('/s/notARealTokenAtAll1234');
   await expect(page.getByRole('alert')).toContainText('could not find');

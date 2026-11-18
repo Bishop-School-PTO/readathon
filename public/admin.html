@@ -86,6 +86,16 @@
           <div class="row" style="margin-top:1rem">
             <input type="search" id="student-search" class="grow" placeholder="Search by name, teacher, grade or code">
             <select id="student-class" style="width:auto"><option value="">All classes</option></select>
+            <!-- Also the order of the printed slips and the CSV. -->
+            <select id="student-sort" style="width:auto" aria-label="Sort students">
+              <option value="">Roster order</option>
+              <option value="class">Sort by grade, then teacher</option>
+              <option value="teacher">Sort by teacher</option>
+              <option value="last">Sort by last name</option>
+              <option value="first">Sort by first name</option>
+              <option value="minutes">Sort by most minutes</option>
+              <option value="raised">Sort by most raised</option>
+            </select>
           </div>
         </div>
         <div class="card no-print">

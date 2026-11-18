@@ -188,7 +188,7 @@
     var select = $('student-class');
     var current = select.value;
     var classes = [];
-    data.students.forEach(function (s) { if (classes.indexOf(className(s)) < 0) classes.push(className(s)); });
+    data.students.slice().sort(byClass).forEach(function (s) { if (classes.indexOf(className(s)) < 0) classes.push(className(s)); });
     select.innerHTML = '<option value="">All classes</option>' + classes.map(function (c) {
       return '<option>' + RA.esc(c) + '</option>';
     }).join('');
@@ -199,15 +199,31 @@
     filterStudents();
   }
 
+  function text(a, b) { return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base', numeric: true }); }
+  function byName(a, b) { return text(a.lastName, b.lastName) || text(a.firstName, b.firstName); }
+  function byClass(a, b) { return RA.compareGrades(a.grade, b.grade) || text(a.teacher, b.teacher); }
+  // Ties fall back to the class, then the name, so each class's slips print together in name order.
+  var SORTS = {
+    class: function (a, b) { return byClass(a, b) || byName(a, b); },
+    teacher: function (a, b) { return text(a.teacher, b.teacher) || byClass(a, b) || byName(a, b); },
+    last: function (a, b) { return byName(a, b) || byClass(a, b); },
+    first: function (a, b) { return text(a.firstName, b.firstName) || text(a.lastName, b.lastName) || byClass(a, b); },
+    minutes: function (a, b) { return b.minutes - a.minutes || byClass(a, b) || byName(a, b); },
+    raised: function (a, b) { return b.raised - a.raised || byClass(a, b) || byName(a, b); },
+  };
+
+  /** The students the search and class filters show, in the chosen order (the table, slips and CSV). */
   function visibleStudents() {
     var q = $('student-search').value.trim().toLowerCase();
     var cls = $('student-class').value;
-    return data.students.filter(function (s) {
+    var rows = data.students.filter(function (s) {
       if (cls && className(s) !== cls) return false;
       if (!q) return true;
       return [s.firstName, s.lastName, s.grade, s.teacher, s.code, s.studentId].concat(s.contacts.map(function (c) { return c.email; }))
         .join(' ').toLowerCase().indexOf(q) >= 0;
     });
+    var sort = SORTS[$('student-sort').value];
+    return sort ? rows.sort(sort) : rows;
   }
 
   function filterStudents() {
@@ -373,6 +389,12 @@
 
   $('student-search').oninput = filterStudents;
   $('student-class').onchange = filterStudents;
+  // Remembered on this browser, so the slips print in the same order next time.
+  try { $('student-sort').value = localStorage.getItem('readathon.studentSort') || ''; } catch (e) { /* storage blocked */ }
+  $('student-sort').onchange = function () {
+    try { localStorage.setItem('readathon.studentSort', $('student-sort').value); } catch (e) { /* storage blocked */ }
+    filterStudents();
+  };
 
   async function regenerate(s, btn) {
     if (!btn.dataset.armed) {
